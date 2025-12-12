@@ -1,16 +1,106 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import WorkspacePane from './components/WorkspacePane';
 import { TimelineRenderer } from './src/components/chat/TimelineRenderer';
 import { ChatInput } from './src/components/chat/ChatInput';
 import { DirectorControls } from './src/components/debug/DirectorControls';
+import SystemStatus from './src/components/machine/SystemStatus';
 import { useDirectorMode } from './src/hooks/useDirectorMode';
 import { useMercuryEngine } from './src/hooks/useMercuryEngine';
+import { useE2B } from './src/hooks/useE2B';
+import { E2BProvider } from './src/contexts/E2BContext';
 import { AppState, Tab, FileNode } from './types';
 import { INITIAL_FILES } from './constants';
-import { Bug, PanelRightClose, PanelRightOpen, Terminal, Zap } from 'lucide-react';
+import { Bug, PanelRightClose, PanelRightOpen, Terminal, Zap, Key, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const App: React.FC = () => {
+interface ApiKeyModalProps {
+  isOpen: boolean;
+  onSubmit: (apiKey: string) => void;
+  onClose: () => void;
+  error?: string | null;
+}
+
+const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onSubmit, onClose, error }) => {
+  const [apiKey, setApiKey] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (apiKey.trim()) {
+      onSubmit(apiKey.trim());
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-[#0A0A0A] border border-orange-500/30 rounded-lg p-6 w-full max-w-md mx-4 shadow-2xl shadow-orange-500/10"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2 text-orange-500">
+            <Key size={18} />
+            <span className="font-mono font-bold tracking-wider text-sm">E2B_AUTH_REQUIRED</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-orange-500 transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-xs text-gray-500 font-mono mb-2 tracking-wider">
+              API_KEY
+            </label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="e2b_..."
+              className="w-full bg-[#050505] border border-[#333] rounded px-4 py-3 font-mono text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors"
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div className="mb-4 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded text-red-500 text-xs font-mono">
+              ERR: {error}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 bg-[#111] border border-[#333] rounded font-mono text-xs text-gray-500 hover:text-gray-300 hover:border-[#444] transition-colors"
+            >
+              CANCEL
+            </button>
+            <button
+              type="submit"
+              disabled={!apiKey.trim()}
+              className="flex-1 px-4 py-2 bg-orange-500 rounded font-mono text-xs text-black font-bold tracking-wider hover:bg-orange-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              CONNECT
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-4 text-[10px] text-gray-600 font-mono">
+          // Set VITE_E2B_API_KEY in .env to skip this prompt
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const AppContent: React.FC = () => {
   const [appState, setAppState] = useState<AppState>({
     activeTab: Tab.EDITOR,
     files: INITIAL_FILES,
@@ -18,16 +108,38 @@ const App: React.FC = () => {
   });
 
   const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
-  // Director Mode (for UI debugging)
   const [isDirectorMode, setIsDirectorMode] = useState(false);
   const { events: directorEvents, triggers } = useDirectorMode();
 
-  // Mercury Engine (real AI)
   const { timeline: mercuryTimeline, isLoading, sendMessage } = useMercuryEngine();
 
-  // Use director events or mercury timeline based on mode
+  const { status: e2bStatus, connect, disconnect, error: e2bError, sandboxId } = useE2B();
+
   const events = isDirectorMode ? directorEvents : mercuryTimeline;
+
+  useEffect(() => {
+    const envKey = import.meta.env.VITE_E2B_API_KEY;
+    if (envKey && e2bStatus === 'disconnected') {
+      connect(envKey);
+    } else if (!envKey && e2bStatus === 'disconnected') {
+      setShowApiKeyModal(true);
+    }
+  }, []);
+
+  const handleApiKeySubmit = async (apiKey: string) => {
+    await connect(apiKey);
+    if (e2bStatus !== 'error') {
+      setShowApiKeyModal(false);
+    }
+  };
+
+  useEffect(() => {
+    if (e2bStatus === 'connected') {
+      setShowApiKeyModal(false);
+    }
+  }, [e2bStatus]);
 
   const handleTabChange = (tab: Tab) => {
     setAppState(prev => ({ ...prev, activeTab: tab }));
@@ -60,7 +172,6 @@ const App: React.FC = () => {
   return (
     <div className="flex w-screen h-screen overflow-hidden bg-[#0A0A0A] text-gray-300 font-mono selection:bg-orange-500 selection:text-black relative">
 
-      {/* Layout Toggle Button */}
       <button
         onClick={() => setIsWorkspaceVisible(!isWorkspaceVisible)}
         className="absolute top-3 right-4 z-50 text-orange-500/50 hover:text-orange-500 transition-colors"
@@ -69,7 +180,6 @@ const App: React.FC = () => {
         {isWorkspaceVisible ? <PanelRightClose size={20} /> : <PanelRightOpen size={20} />}
       </button>
 
-      {/* Left Pane: Comm Link (Chat) */}
       <motion.div
         layout
         className="h-full bg-[#050505] z-10 flex flex-col border-r border-[#222]"
@@ -80,7 +190,6 @@ const App: React.FC = () => {
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
-        {/* Header */}
         <div className="h-12 border-b border-[#222] flex items-center justify-between px-4 bg-[#0A0A0A] shrink-0 relative z-10">
           <div className="flex items-center gap-2 text-orange-500">
             <Terminal size={16} />
@@ -88,7 +197,6 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Loading indicator */}
             {isLoading && (
               <div className="flex items-center gap-1 text-orange-500/70 text-[10px]">
                 <Zap size={10} className="animate-pulse" />
@@ -96,7 +204,6 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {/* Director Mode Toggle */}
             <button
               onClick={() => setIsDirectorMode(!isDirectorMode)}
               className={`flex items-center gap-2 px-2 py-1 text-[10px] font-mono border transition-colors ${isDirectorMode ? 'border-orange-500 text-orange-500 bg-orange-500/10' : 'border-[#333] text-gray-500 hover:text-gray-300'}`}
@@ -107,7 +214,14 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Timeline / Chat Area */}
+        <div className="px-4 py-2 border-b border-[#222] bg-[#080808]">
+          <SystemStatus
+            status={e2bStatus}
+            error={e2bError}
+            sandboxId={sandboxId}
+          />
+        </div>
+
         <div className="flex-1 overflow-y-auto custom-scrollbar relative">
           {events.length === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
@@ -123,7 +237,6 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Input Area */}
         <div className="p-4 bg-[#0A0A0A] border-t border-[#222] shrink-0 relative z-10">
           <ChatInput
             onSend={handleSend}
@@ -132,7 +245,6 @@ const App: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Right Pane: Workspace */}
       <AnimatePresence>
         {isWorkspaceVisible && (
           <motion.div
@@ -152,9 +264,27 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Director Controls Overlay */}
       {isDirectorMode && <DirectorControls triggers={triggers} />}
+
+      <AnimatePresence>
+        {showApiKeyModal && (
+          <ApiKeyModal
+            isOpen={showApiKeyModal}
+            onSubmit={handleApiKeySubmit}
+            onClose={() => setShowApiKeyModal(false)}
+            error={e2bError}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <E2BProvider>
+      <AppContent />
+    </E2BProvider>
   );
 };
 

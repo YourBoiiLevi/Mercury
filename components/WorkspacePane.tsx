@@ -9,8 +9,8 @@ import { Code, Terminal, Globe, FileText } from 'lucide-react';
 interface WorkspacePaneProps {
   appState: AppState;
   onTabChange: (tab: Tab) => void;
-  onFileSelect: (id: string) => void;
-  onToggleFolder: (id: string) => void;
+  onFileSelect?: (id: string) => void;
+  onToggleFolder?: (id: string) => void;
 }
 
 const TabButton: React.FC<{

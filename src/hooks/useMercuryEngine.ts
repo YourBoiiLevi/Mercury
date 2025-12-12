@@ -3,11 +3,15 @@ import { Content, Part, FunctionCall } from '@google/genai';
 import { TimelineEvent } from '../types/timeline';
 import { streamMercuryResponse } from '../../services/geminiService';
 import { executeToolMock } from '../../services/tools';
+import { useMercuryRuntime, RuntimeToolResult } from './useMercuryRuntime';
 
 // Helper to generate unique IDs for timeline events
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export const useMercuryEngine = () => {
+    // --- Runtime Hook ---
+    const runtime = useMercuryRuntime();
+
     // --- State ---
     // SDK-native history: CRITICAL for Gemini 3.0 thought signatures
     const [history, setHistory] = useState<Content[]>([]);
@@ -148,11 +152,58 @@ export const useMercuryEngine = () => {
             if (hasFunctionCall && functionCalls.length > 0) {
                 const functionResponseParts: Part[] = [];
 
+                // Real tool dispatcher
+                const executeRealTool = async (name: string, args: any): Promise<RuntimeToolResult | any> => {
+                    if (!runtime.isReady) {
+                        return { error: 'System not ready. E2B sandbox is not connected.' };
+                    }
+
+                    switch (name) {
+                        // File System Tools
+                        case 'file_readFile':
+                            return runtime.readFile(args.path, args.startLine, args.endLine);
+                        case 'file_writeFile':
+                            return runtime.writeFile(args.path, args.content);
+                        case 'file_editFile':
+                            return runtime.editFile(args.path, args.oldContent, args.newContent);
+                        case 'file_deleteFile':
+                            return runtime.deleteFile(args.path);
+                        case 'file_listFiles':
+                            return runtime.listFiles(args.path, args.recursive, args.pattern);
+
+                        // Terminal Tools
+                        case 'terminal_bash':
+                            return runtime.runCommand(args.command, args.cwd, args.timeout);
+                        case 'terminal_grep':
+                            return runtime.grep(args.pattern, args.path, args.includes, args.caseSensitive);
+                        case 'terminal_glob':
+                            return runtime.glob(args.pattern, args.cwd);
+
+                        // Web tools (keep mock for now)
+                        case 'web_search':
+                        case 'web_fetch':
+                            return { error: 'Web tools not yet implemented' };
+
+                        // Planner tools (keep in-memory mock from tools.ts)
+                        case 'planner_createTodo':
+                        case 'planner_updateTodo':
+                        case 'planner_listTodos':
+                        case 'planner_deleteTodo':
+                            return executeToolMock(name, args);
+
+                        default:
+                            return { error: `Unknown tool: ${name}` };
+                    }
+                };
+
                 for (const { call } of functionCalls) {
                     console.log(`[MERCURY] Executing tool: ${call.name}`);
 
-                    // Execute the mock tool
-                    const result = await executeToolMock(call.name, call.args);
+                    // Execute the real tool (or mock for planner/web)
+                    const result = await executeRealTool(call.name, call.args);
+
+                    // Determine success state from result
+                    const isSuccess = result.success !== false && !result.error;
 
                     // Update timeline with result
                     setTimeline(prev => prev.map(e => {
@@ -160,18 +211,18 @@ export const useMercuryEngine = () => {
                             const toolEvent = e as TimelineEvent & { type: 'tool_call' };
                             return {
                                 ...toolEvent,
-                                state: 'success' as const,
-                                result: JSON.stringify(result)
+                                state: isSuccess ? 'success' as const : 'error' as const,
+                                result: JSON.stringify(result.data || result)
                             };
                         }
                         return e;
                     }) as TimelineEvent[]);
 
-                    // Build function response part
+                    // Build function response part - pass data for LLM consumption
                     functionResponseParts.push({
                         functionResponse: {
                             name: call.name,
-                            response: result
+                            response: result.data || result
                         }
                     });
                 }
@@ -194,7 +245,7 @@ export const useMercuryEngine = () => {
             console.warn('[MERCURY] Agent loop hit max iterations limit.');
             addTimelineEvent({ type: 'agent_text', content: '[System: Max tool call iterations reached]' });
         }
-    }, [processStream, addTimelineEvent]);
+    }, [processStream, addTimelineEvent, runtime]);
 
     // --- Public Interface ---
     return {

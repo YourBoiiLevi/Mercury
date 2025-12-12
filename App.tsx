@@ -9,6 +9,8 @@ import { useDirectorMode } from './src/hooks/useDirectorMode';
 import { useMercuryEngine } from './src/hooks/useMercuryEngine';
 import { useE2B } from './src/hooks/useE2B';
 import { E2BProvider } from './src/contexts/E2BContext';
+import { FileSystemProvider } from './src/contexts/FileSystemContext';
+import { TerminalProvider } from './src/contexts/TerminalContext';
 import { AppState, Tab, FileNode } from './types';
 import { INITIAL_FILES } from './constants';
 import { Bug, PanelRightClose, PanelRightOpen, Terminal, Zap, Key, X } from 'lucide-react';
@@ -286,7 +288,11 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <E2BProvider>
-      <AppContent />
+      <FileSystemProvider>
+        <TerminalProvider>
+          <AppContent />
+        </TerminalProvider>
+      </FileSystemProvider>
     </E2BProvider>
   );
 };

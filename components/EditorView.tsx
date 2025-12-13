@@ -1,24 +1,27 @@
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { FileNode } from '../types';
-import { Folder, FileCode, ChevronRight, ChevronDown, File } from 'lucide-react';
+import { FileTreeNode, useFileSystem } from '../src/contexts/FileSystemContext';
+import { useMercuryRuntime } from '../src/hooks/useMercuryRuntime';
+import { Folder, FileCode, ChevronRight, ChevronDown, File, Loader2 } from 'lucide-react';
 import CodeViewer from './CodeViewer';
 
 interface EditorViewProps {
-  files: FileNode[];
-  activeFileId: string | null;
-  onFileSelect: (id: string) => void;
-  onToggleFolder: (id: string) => void;
+  files?: FileNode[];
+  activeFileId?: string | null;
+  onFileSelect?: (id: string) => void;
+  onToggleFolder?: (id: string) => void;
 }
 
 const FileTreeItem: React.FC<{
-  node: FileNode;
+  node: FileTreeNode | FileNode;
   activeId: string | null;
   level: number;
-  onSelect: (id: string) => void;
-  onToggle: (id: string) => void;
+  onSelect: (path: string) => void;
+  onToggle: (path: string) => void;
 }> = ({ node, activeId, level, onSelect, onToggle }) => {
   const isFolder = node.type === 'folder';
-  const isActive = node.id === activeId;
+  const nodePath = 'path' in node ? node.path : node.id;
+  const isActive = nodePath === activeId;
   const paddingLeft = `${level * 16 + 12}px`;
 
   return (
@@ -28,7 +31,7 @@ const FileTreeItem: React.FC<{
         ${isActive ? 'border-mercury-orange bg-mercury-orange/10 text-mercury-orange' : 'border-transparent text-gray-400'}
         `}
         style={{ paddingLeft }}
-        onClick={() => isFolder ? onToggle(node.id) : onSelect(node.id)}
+        onClick={() => isFolder ? onToggle(nodePath) : onSelect(nodePath)}
       >
         <span className="mr-2 opacity-70">
           {isFolder ? (
@@ -46,7 +49,7 @@ const FileTreeItem: React.FC<{
         <div>
           {node.children.map(child => (
             <FileTreeItem
-              key={child.id}
+              key={'path' in child ? child.path : child.id}
               node={child}
               activeId={activeId}
               level={level + 1}
@@ -60,46 +63,146 @@ const FileTreeItem: React.FC<{
   );
 };
 
-const EditorView: React.FC<EditorViewProps> = ({ files, activeFileId, onFileSelect, onToggleFolder }) => {
-  // Helper to find content of active file
-  const findNode = (nodes: FileNode[], id: string): FileNode | null => {
-    for (const node of nodes) {
-      if (node.id === id) return node;
-      if (node.children) {
-        const found = findNode(node.children, id);
-        if (found) return found;
+const EditorView: React.FC<EditorViewProps> = ({ 
+  files: propFiles, 
+  activeFileId: propActiveFileId, 
+  onFileSelect: propOnFileSelect, 
+  onToggleFolder: propOnToggleFolder 
+}) => {
+  const fileSystemContext = useFileSystem();
+  const runtime = useMercuryRuntime();
+  
+  const [activeFileId, setActiveFileId] = useState<string | null>(propActiveFileId || null);
+  const [activeContent, setActiveContent] = useState<string | null>(null);
+  const [activeLang, setActiveLang] = useState<string>('text');
+  const [loadingFile, setLoadingFile] = useState(false);
+
+  const files = fileSystemContext?.files || propFiles || [];
+  const toggleFolder = fileSystemContext?.toggleFolder || propOnToggleFolder;
+  const isLoading = fileSystemContext?.isLoading || false;
+
+  const detectLanguage = useCallback((path: string): string => {
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    const langMap: Record<string, string> = {
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+      'py': 'python',
+      'json': 'json',
+      'md': 'markdown',
+      'css': 'css',
+      'html': 'html',
+      'sh': 'bash',
+      'yml': 'yaml',
+      'yaml': 'yaml',
+      'toml': 'toml',
+      'rs': 'rust',
+      'go': 'go',
+      'rb': 'ruby',
+      'php': 'php',
+      'java': 'java',
+      'c': 'c',
+      'cpp': 'cpp',
+      'h': 'c',
+      'hpp': 'cpp',
+    };
+    return langMap[ext] || 'text';
+  }, []);
+
+  const handleFileSelect = useCallback(async (path: string) => {
+    setActiveFileId(path);
+    propOnFileSelect?.(path);
+
+    if (runtime.isReady) {
+      setLoadingFile(true);
+      try {
+        const result = await runtime.readFile(path);
+        if (result.success && result.data) {
+          setActiveContent(result.data.content);
+          setActiveLang(detectLanguage(path));
+        } else {
+          setActiveContent(`// Error loading file: ${result.error}`);
+          setActiveLang('text');
+        }
+      } catch (err) {
+        setActiveContent(`// Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setActiveLang('text');
+      } finally {
+        setLoadingFile(false);
+      }
+    } else {
+      const findNode = (nodes: (FileTreeNode | FileNode)[], id: string): (FileTreeNode | FileNode) | null => {
+        for (const node of nodes) {
+          const nodeId = 'path' in node ? node.path : node.id;
+          if (nodeId === id) return node;
+          if (node.children) {
+            const found = findNode(node.children as (FileTreeNode | FileNode)[], id);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      
+      const node = findNode(files, path);
+      if (node && 'content' in node && node.content) {
+        setActiveContent(node.content);
+        setActiveLang('language' in node ? node.language || 'text' : detectLanguage(path));
+      } else {
+        setActiveContent(null);
       }
     }
-    return null;
-  };
+  }, [runtime, detectLanguage, propOnFileSelect, files]);
 
-  const activeNode = activeFileId ? findNode(files, activeFileId) : null;
-  const activeContent = activeNode && activeNode.type === 'file' ? activeNode.content : null;
-  const activeLang = activeNode ? activeNode.language || 'text' : 'text';
+  const handleToggleFolder = useCallback((path: string) => {
+    toggleFolder?.(path);
+    propOnToggleFolder?.(path);
+  }, [toggleFolder, propOnToggleFolder]);
+
+  useEffect(() => {
+    if (propActiveFileId && propActiveFileId !== activeFileId) {
+      setActiveFileId(propActiveFileId);
+    }
+  }, [propActiveFileId]);
 
   return (
     <div className="flex h-full w-full">
       {/* Sidebar */}
       <div className="w-64 border-r border-mercury-orange/20 bg-mercury-black flex flex-col">
-        <div className="p-3 border-b border-mercury-orange/20 text-mercury-orange/60 text-xs font-bold tracking-wider">
-          // PROJECT_FILES
+        <div className="p-3 border-b border-mercury-orange/20 text-mercury-orange/60 text-xs font-bold tracking-wider flex items-center justify-between">
+          <span>// PROJECT_FILES</span>
+          {isLoading && <Loader2 size={12} className="animate-spin text-mercury-orange/50" />}
         </div>
         <div className="flex-1 overflow-y-auto py-2">
-          {files.map(node => (
-            <FileTreeItem
-              key={node.id}
-              node={node}
-              activeId={activeFileId}
-              level={0}
-              onSelect={onFileSelect}
-              onToggle={onToggleFolder}
-            />
-          ))}
+          {files.length === 0 ? (
+            <div className="px-4 py-8 text-center text-gray-600 text-xs">
+              {runtime.isReady ? 'Loading files...' : 'Waiting for sandbox...'}
+            </div>
+          ) : (
+            files.map(node => (
+              <FileTreeItem
+                key={'path' in node ? node.path : node.id}
+                node={node}
+                activeId={activeFileId}
+                level={0}
+                onSelect={handleFileSelect}
+                onToggle={handleToggleFolder}
+              />
+            ))
+          )}
         </div>
       </div>
 
       {/* Code Area */}
       <div className="flex-1 bg-mercury-carbon relative flex flex-col overflow-hidden">
+         {loadingFile && (
+           <div className="absolute inset-0 z-20 flex items-center justify-center bg-mercury-carbon/80">
+             <div className="flex items-center gap-2 text-mercury-orange">
+               <Loader2 size={20} className="animate-spin" />
+               <span className="text-xs tracking-wider">LOADING_FILE...</span>
+             </div>
+           </div>
+         )}
          {activeContent !== null ? (
              <>
                <div className="absolute top-0 right-0 p-2 z-10 bg-mercury-carbon/80 backdrop-blur border-b border-l border-mercury-orange/10 text-xs text-mercury-orange/40 font-mono">

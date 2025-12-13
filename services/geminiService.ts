@@ -2,7 +2,7 @@ import { GoogleGenAI, Content, Part, FunctionDeclaration } from "@google/genai";
 import { TOOLS } from "./tools";
 
 // --- Constants ---
-const MODEL_ID = 'gemini-flash-lite-latest';
+const MODEL_ID = "gemini-flash-latest";
 
 export const MERCURY_SYSTEM_INSTRUCTION = `You are MERCURY, an advanced autonomous software engineering agent.
 Your aesthetic is industrial, precise, and utilitarian.
@@ -49,11 +49,14 @@ let client: GoogleGenAI | null = null;
 const getClient = (): GoogleGenAI => {
   if (!client) {
     // Using process.env which is defined in vite.config.ts
-    const apiKey = (process.env as any).GEMINI_API_KEY || (process.env as any).API_KEY;
+    const apiKey =
+      (process.env as any).GEMINI_API_KEY || (process.env as any).API_KEY;
     if (!apiKey) {
-      console.error("[MERCURY] GEMINI_API_KEY is missing from environment variables.");
+      console.error(
+        "[MERCURY] GEMINI_API_KEY is missing from environment variables.",
+      );
     }
-    client = new GoogleGenAI({ apiKey: apiKey || 'dummy-key-for-ui-dev' });
+    client = new GoogleGenAI({ apiKey: apiKey || "dummy-key-for-ui-dev" });
   }
   return client;
 };
@@ -63,11 +66,11 @@ const getClient = (): GoogleGenAI => {
 /**
  * Streams a response from the Gemini model.
  * This is a stateless call; you must manage the full conversation history externally.
- * 
+ *
  * CRITICAL: To comply with Gemini 3.0 Pro requirements, the `history` array MUST
  * contain the exact `Part` objects from previous model responses, including any
  * `thoughtSignature` fields. Do not strip or modify these.
- * 
+ *
  * @param history - The full conversation history as an array of Content objects.
  * @returns An async iterable stream of GenerateContentResponse chunks.
  */
@@ -81,15 +84,13 @@ export const streamMercuryResponse = async (history: Content[]) => {
     contents: history,
     config: {
       systemInstruction: MERCURY_SYSTEM_INSTRUCTION,
-      tools: [
-        { functionDeclarations: toolDeclarations }
-      ],
+      tools: [{ functionDeclarations: toolDeclarations }],
       thinkingConfig: {
         includeThoughts: true,
         // Use dynamic thinking for flexibility
-        thinkingBudget: -1
+        thinkingBudget: -1,
       },
       temperature: 0.7,
-    }
+    },
   });
 };

@@ -18,6 +18,7 @@ export interface MercuryRuntime {
     runCommand: (command: string, cwd?: string, timeout?: number) => Promise<RuntimeToolResult>;
     grep: (pattern: string, path: string, includes?: string[], caseSensitive?: boolean) => Promise<RuntimeToolResult>;
     glob: (pattern: string, cwd?: string) => Promise<RuntimeToolResult>;
+    refreshFiles: () => Promise<void>;
     isReady: boolean;
 }
 
@@ -81,6 +82,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         try {
             const sb = ensureSandbox();
             await sb.files.write(path, content);
+            // Small delay to ensure filesystem has settled
+            await new Promise(resolve => setTimeout(resolve, 300));
             await refreshFileTree?.();
 
             return {
@@ -117,6 +120,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
 
             const updated = existing.replace(oldContent, newContent);
             await sb.files.write(path, updated);
+            // Small delay to ensure filesystem has settled
+            await new Promise(resolve => setTimeout(resolve, 300));
             await refreshFileTree?.();
 
             return {
@@ -139,6 +144,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         try {
             const sb = ensureSandbox();
             await sb.files.remove(path);
+            // Small delay to ensure filesystem has settled
+            await new Promise(resolve => setTimeout(resolve, 300));
             await refreshFileTree?.();
 
             return {
@@ -210,6 +217,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 timeoutMs: timeout || 30000,
             });
 
+            // Small delay to ensure filesystem has settled
+            await new Promise(resolve => setTimeout(resolve, 300));
             await refreshFileTree?.();
 
             const stdout = trimOutput(result.stdout || '');
@@ -306,6 +315,10 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         }
     }, [ensureSandbox]);
 
+    const refreshFiles = useCallback(async () => {
+        await refreshFileTree?.();
+    }, [refreshFileTree]);
+
     return useMemo(() => ({
         readFile,
         writeFile,
@@ -315,6 +328,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         runCommand,
         grep,
         glob,
+        refreshFiles,
         isReady: sandbox !== null,
-    }), [readFile, writeFile, editFile, deleteFile, listFiles, runCommand, grep, glob, sandbox]);
+    }), [readFile, writeFile, editFile, deleteFile, listFiles, runCommand, grep, glob, refreshFiles, sandbox]);
 };

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { FileNode } from '../types';
 import { FileTreeNode, useFileSystem } from '../src/contexts/FileSystemContext';
 import { useMercuryRuntime } from '../src/hooks/useMercuryRuntime';
-import { Folder, FileCode, ChevronRight, ChevronDown, File, Loader2 } from 'lucide-react';
+import { Folder, FileCode, ChevronRight, ChevronDown, File, Loader2, RefreshCw } from 'lucide-react';
 import CodeViewer from './CodeViewer';
 
 interface EditorViewProps {
@@ -35,13 +35,13 @@ const FileTreeItem: React.FC<{
       >
         <span className="mr-2 opacity-70">
           {isFolder ? (
-             node.isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+            node.isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />
           ) : (
             <div className="w-[14px]" />
           )}
         </span>
         <span className="mr-2">
-            {isFolder ? <Folder size={14} /> : <FileCode size={14} />}
+          {isFolder ? <Folder size={14} /> : <FileCode size={14} />}
         </span>
         <span className="text-sm tracking-tight">{node.name}</span>
       </div>
@@ -63,23 +63,35 @@ const FileTreeItem: React.FC<{
   );
 };
 
-const EditorView: React.FC<EditorViewProps> = ({ 
-  files: propFiles, 
-  activeFileId: propActiveFileId, 
-  onFileSelect: propOnFileSelect, 
-  onToggleFolder: propOnToggleFolder 
+const EditorView: React.FC<EditorViewProps> = ({
+  files: propFiles,
+  activeFileId: propActiveFileId,
+  onFileSelect: propOnFileSelect,
+  onToggleFolder: propOnToggleFolder
 }) => {
   const fileSystemContext = useFileSystem();
   const runtime = useMercuryRuntime();
-  
+
   const [activeFileId, setActiveFileId] = useState<string | null>(propActiveFileId || null);
   const [activeContent, setActiveContent] = useState<string | null>(null);
   const [activeLang, setActiveLang] = useState<string>('text');
   const [loadingFile, setLoadingFile] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const files = fileSystemContext?.files || propFiles || [];
   const toggleFolder = fileSystemContext?.toggleFolder || propOnToggleFolder;
   const isLoading = fileSystemContext?.isLoading || false;
+
+  const handleManualRefresh = useCallback(async () => {
+    if (runtime.isReady && !refreshing) {
+      setRefreshing(true);
+      try {
+        await runtime.refreshFiles();
+      } finally {
+        setRefreshing(false);
+      }
+    }
+  }, [runtime, refreshing]);
 
   const detectLanguage = useCallback((path: string): string => {
     const ext = path.split('.').pop()?.toLowerCase() || '';
@@ -143,7 +155,7 @@ const EditorView: React.FC<EditorViewProps> = ({
         }
         return null;
       };
-      
+
       const node = findNode(files, path);
       if (node && 'content' in node && node.content) {
         setActiveContent(node.content);
@@ -171,7 +183,17 @@ const EditorView: React.FC<EditorViewProps> = ({
       <div className="w-64 border-r border-mercury-orange/20 bg-mercury-black flex flex-col">
         <div className="p-3 border-b border-mercury-orange/20 text-mercury-orange/60 text-xs font-bold tracking-wider flex items-center justify-between">
           <span>// PROJECT_FILES</span>
-          {isLoading && <Loader2 size={12} className="animate-spin text-mercury-orange/50" />}
+          <div className="flex items-center gap-2">
+            {isLoading && <Loader2 size={12} className="animate-spin text-mercury-orange/50" />}
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing || !runtime.isReady}
+              className="p-1 hover:bg-mercury-orange/10 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Refresh Files"
+            >
+              <RefreshCw size={12} className={`text-mercury-orange/70 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto py-2">
           {files.length === 0 ? (
@@ -195,27 +217,27 @@ const EditorView: React.FC<EditorViewProps> = ({
 
       {/* Code Area */}
       <div className="flex-1 bg-mercury-carbon relative flex flex-col overflow-hidden">
-         {loadingFile && (
-           <div className="absolute inset-0 z-20 flex items-center justify-center bg-mercury-carbon/80">
-             <div className="flex items-center gap-2 text-mercury-orange">
-               <Loader2 size={20} className="animate-spin" />
-               <span className="text-xs tracking-wider">LOADING_FILE...</span>
-             </div>
-           </div>
-         )}
-         {activeContent !== null ? (
-             <>
-               <div className="absolute top-0 right-0 p-2 z-10 bg-mercury-carbon/80 backdrop-blur border-b border-l border-mercury-orange/10 text-xs text-mercury-orange/40 font-mono">
-                 [READ_ONLY] {activeLang.toUpperCase()}
-               </div>
-               <CodeViewer code={activeContent} lang={activeLang} />
-             </>
-         ) : (
-             <div className="h-full flex flex-col items-center justify-center text-mercury-orange/30">
-                 <File size={48} strokeWidth={1} />
-                 <span className="mt-4 text-xs tracking-widest">[NO_FILE_SELECTED]</span>
-             </div>
-         )}
+        {loadingFile && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-mercury-carbon/80">
+            <div className="flex items-center gap-2 text-mercury-orange">
+              <Loader2 size={20} className="animate-spin" />
+              <span className="text-xs tracking-wider">LOADING_FILE...</span>
+            </div>
+          </div>
+        )}
+        {activeContent !== null ? (
+          <>
+            <div className="absolute top-0 right-0 p-2 z-10 bg-mercury-carbon/80 backdrop-blur border-b border-l border-mercury-orange/10 text-xs text-mercury-orange/40 font-mono">
+              [READ_ONLY] {activeLang.toUpperCase()}
+            </div>
+            <CodeViewer code={activeContent} lang={activeLang} />
+          </>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-mercury-orange/30">
+            <File size={48} strokeWidth={1} />
+            <span className="mt-4 text-xs tracking-widest">[NO_FILE_SELECTED]</span>
+          </div>
+        )}
       </div>
     </div>
   );

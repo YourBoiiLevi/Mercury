@@ -326,6 +326,32 @@ export const TOOLS: FunctionDeclaration[] = [
       required: ["id"],
     },
   },
+  {
+    name: "github_create_pr",
+    description: "Create a Pull Request on GitHub. Requires the repository to be hydrated first.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        title: {
+          type: Type.STRING,
+          description: "The title of the pull request.",
+        },
+        body: {
+          type: Type.STRING,
+          description: "The description/body of the pull request. Supports markdown.",
+        },
+        head: {
+          type: Type.STRING,
+          description: "The name of the branch where your changes are implemented.",
+        },
+        base: {
+          type: Type.STRING,
+          description: "The name of the branch you want the changes pulled into. Usually 'main' or 'master'.",
+        },
+      },
+      required: ["title", "head", "base"],
+    },
+  },
 ];
 
 // ============================================================================

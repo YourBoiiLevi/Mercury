@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Loader2 } from 'lucide-react';
 
 interface ChatInputProps {
     onSend: (message: string) => void;
     disabled?: boolean;
+    hydrationStatus?: 'idle' | 'configuring' | 'cloning' | 'ready' | 'error';
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled, hydrationStatus }) => {
     const [input, setInput] = useState('');
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -22,6 +23,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled }) => {
             setInput('');
         }
     };
+
+    if (hydrationStatus === 'configuring' || hydrationStatus === 'cloning') {
+        return (
+            <div className="relative z-10">
+                <div className="relative flex items-center justify-center p-4 border border-[#FF3B00] bg-black/50 overflow-hidden">
+                    <div className="absolute inset-0 bg-[#FF3B00]/5 animate-pulse" />
+                    <div className="flex items-center gap-3 relative z-10">
+                        <Loader2 className="animate-spin text-[#FF3B00]" size={18} />
+                        <span className="font-mono text-sm text-[#FF3B00] tracking-widest animate-pulse">
+                            {hydrationStatus === 'configuring' ? 'CONFIGURING_GIT_ENVIRONMENT...' : 'CLONING_REPOSITORY...'}
+                        </span>
+                    </div>
+                </div>
+                <div className="flex justify-between mt-1 px-1">
+                    <span className="text-[10px] text-[#FF3B00]/40 font-mono">MERCURY_ENGINE // LOADING...</span>
+                    <span className="text-[10px] text-[#FF3B00]/40 font-mono">GITHUB_SYNC</span>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="relative z-10">

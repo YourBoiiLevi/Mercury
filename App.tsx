@@ -12,6 +12,8 @@ import { useE2B } from './src/hooks/useE2B';
 import { E2BProvider } from './src/contexts/E2BContext';
 import { FileSystemProvider } from './src/contexts/FileSystemContext';
 import { TerminalProvider } from './src/contexts/TerminalContext';
+import { GitHubProvider, useGitHub } from './src/contexts/GitHubContext';
+import { RepoPickerModal } from './src/components/github/RepoPickerModal';
 import { AppState, Tab, FileNode } from './types';
 import { INITIAL_FILES } from './constants';
 import { Bug, PanelRightClose, PanelRightOpen, Terminal, Zap, Key, X } from 'lucide-react';
@@ -113,6 +115,7 @@ const AppContent: React.FC = () => {
 
   const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showRepoPicker, setShowRepoPicker] = useState(false);
 
   const [isDirectorMode, setIsDirectorMode] = useState(false);
   const { events: directorEvents, triggers } = useDirectorMode();
@@ -120,6 +123,7 @@ const AppContent: React.FC = () => {
   const { timeline: mercuryTimeline, isLoading, sendMessage } = useMercuryEngine();
 
   const { status: e2bStatus, connect, disconnect, error: e2bError, sandboxId } = useE2B();
+  const { selectedRepo, hydrationStatus } = useGitHub();
 
   const events = isDirectorMode ? directorEvents : mercuryTimeline;
 
@@ -209,6 +213,13 @@ const AppContent: React.FC = () => {
             )}
 
             <button
+              onClick={() => setShowRepoPicker(true)}
+              className="flex items-center gap-2 px-2 py-1 text-[10px] font-mono border border-[#333] text-gray-500 hover:text-gray-300 hover:border-orange-500/50 transition-colors"
+            >
+              {selectedRepo ? selectedRepo.name : 'CONNECT_REPO'}
+            </button>
+
+            <button
               onClick={() => setIsDirectorMode(!isDirectorMode)}
               className={`flex items-center gap-2 px-2 py-1 text-[10px] font-mono border transition-colors ${isDirectorMode ? 'border-orange-500 text-orange-500 bg-orange-500/10' : 'border-[#333] text-gray-500 hover:text-gray-300'}`}
             >
@@ -245,6 +256,7 @@ const AppContent: React.FC = () => {
           <ChatInput
             onSend={handleSend}
             disabled={isLoading}
+            hydrationStatus={hydrationStatus}
           />
         </div>
       </motion.div>
@@ -281,6 +293,15 @@ const AppContent: React.FC = () => {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showRepoPicker && (
+            <RepoPickerModal
+                isOpen={showRepoPicker}
+                onClose={() => setShowRepoPicker(false)}
+            />
+        )}
+      </AnimatePresence>
+
       <ManualOverrideButton />
       <DebugUplink />
     </div>
@@ -290,11 +311,13 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <E2BProvider>
-      <FileSystemProvider>
-        <TerminalProvider>
-          <AppContent />
-        </TerminalProvider>
-      </FileSystemProvider>
+      <GitHubProvider>
+        <FileSystemProvider>
+          <TerminalProvider>
+            <AppContent />
+          </TerminalProvider>
+        </FileSystemProvider>
+      </GitHubProvider>
     </E2BProvider>
   );
 };

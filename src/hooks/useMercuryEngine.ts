@@ -1,14 +1,16 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useContext } from 'react';
 import { Content, Part, FunctionCall } from '@google/genai';
 import { TimelineEvent } from '../types/timeline';
 import { streamMercuryResponse } from '../../services/geminiService';
 import { executeToolMock } from '../../services/tools';
 import { useMercuryRuntime, RuntimeToolResult } from './useMercuryRuntime';
+import { GitHubContext } from '../contexts/GitHubContext';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export const useMercuryEngine = () => {
     const runtime = useMercuryRuntime();
+    const githubContext = useContext(GitHubContext);
 
     const [history, setHistory] = useState<Content[]>([]);
     const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
@@ -102,11 +104,34 @@ export const useMercuryEngine = () => {
                 return runtime.listFiles(args.path, args.recursive, args.pattern);
 
             case 'terminal_bash':
-                return runtime.runCommand(args.command, args.cwd, args.timeout);
+                return runtime.runCommand(
+                    args.command, 
+                    args.cwd || githubContext?.workingDirectory, 
+                    args.timeout
+                );
             case 'terminal_grep':
                 return runtime.grep(args.pattern, args.path, args.includes, args.caseSensitive);
             case 'terminal_glob':
-                return runtime.glob(args.pattern, args.cwd);
+                return runtime.glob(
+                    args.pattern, 
+                    args.cwd || githubContext?.workingDirectory
+                );
+
+            case 'github_create_pr':
+                if (!githubContext?.isAuthenticated || !githubContext?.selectedRepo) {
+                    return { success: false, error: 'GitHub not connected or no repository selected.' };
+                }
+                try {
+                    const result = await githubContext.createPullRequest({
+                        title: args.title,
+                        body: args.body || '',
+                        head: args.head,
+                        base: args.base,
+                    });
+                    return { success: true, data: result };
+                } catch (err: any) {
+                    return { success: false, error: err.message };
+                }
 
             case 'web_search':
             case 'web_fetch':
@@ -121,7 +146,7 @@ export const useMercuryEngine = () => {
             default:
                 return { error: `Unknown tool: ${name}` };
         }
-    }, [runtime]);
+    }, [runtime, githubContext]);
 
     const runAgentLoop = useCallback(async (currentHistory: Content[]) => {
         let loopHistory = [...currentHistory];
@@ -133,7 +158,12 @@ export const useMercuryEngine = () => {
             loopCount++;
             console.log(`[MERCURY] Agent loop iteration ${loopCount}`);
 
-            const stream = await streamMercuryResponse(loopHistory);
+            const stream = await streamMercuryResponse(loopHistory, githubContext ? {
+                isAuthenticated: githubContext.isAuthenticated,
+                selectedRepo: githubContext.selectedRepo || undefined,
+                workingDirectory: githubContext.workingDirectory || undefined
+            } : undefined);
+            
             const accumulatedParts: Part[] = [];
 
             const { finalParts, hasFunctionCall, functionCalls } = await processStream(stream, accumulatedParts);
@@ -189,7 +219,7 @@ export const useMercuryEngine = () => {
             console.warn('[MERCURY] Agent loop hit max iterations limit.');
             addTimelineEvent({ type: 'agent_text', content: '[System: Max tool call iterations reached]' });
         }
-    }, [processStream, addTimelineEvent, executeRealTool]);
+    }, [processStream, addTimelineEvent, executeRealTool, githubContext]);
 
     const sendMessage = useCallback(async (userMessage: string) => {
         if (!userMessage.trim()) return;

@@ -4,6 +4,7 @@ import { TimelineRenderer } from './src/components/chat/TimelineRenderer';
 import { ChatInput } from './src/components/chat/ChatInput';
 import { DirectorControls } from './src/components/debug/DirectorControls';
 import DebugUplink from './src/components/debug/DebugUplink';
+import ManualOverrideButton from './src/components/debug/ManualOverrideButton';
 import SystemStatus from './src/components/machine/SystemStatus';
 import { useDirectorMode } from './src/hooks/useDirectorMode';
 import { useMercuryEngine } from './src/hooks/useMercuryEngine';
@@ -280,6 +281,7 @@ const AppContent: React.FC = () => {
         )}
       </AnimatePresence>
 
+      <ManualOverrideButton />
       <DebugUplink />
     </div>
   );

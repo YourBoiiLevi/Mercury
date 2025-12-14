@@ -22,6 +22,9 @@ const createToolMapping = (runtime: ReturnType<typeof useMercuryRuntime>): Recor
 // Tools that fallback to mock (no real E2B implementation)
 const MOCK_ONLY_TOOLS = ['web_search', 'web_fetch', 'planner_createTodo', 'planner_updateTodo', 'planner_listTodos', 'planner_deleteTodo'];
 
+// GitHub tools are handled externally via GitHubContext
+const GITHUB_TOOLS = ['github_createPR'];
+
 export interface ToolExecutionResult {
     success: boolean;
     data?: any;
@@ -74,6 +77,15 @@ export const useToolExecutor = () => {
                     usedMock: true,
                 };
             }
+        }
+
+        if (GITHUB_TOOLS.includes(toolName)) {
+            // GitHub tools require external handling via GitHubContext
+            return {
+                success: false,
+                error: 'GITHUB_TOOL_REQUIRES_CONTEXT',
+                usedMock: false,
+            };
         }
 
         const executor = toolMapping[toolName];

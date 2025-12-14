@@ -9,14 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@e2b/desktop": "^1.0.0",
+    "@google/genai": "^1.32.0",
+    "lucide-react": "^0.556.0",
+    "motion": "latest",
+    "octokit": "^4.1.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "lucide-react": "^0.556.0",
-    "@google/genai": "^1.32.0",
-    "@e2b/desktop": "^1.0.0",
-    "streamdown": "1.5.1",
     "shiki": "3.19.0",
-    "motion": "latest"
+    "streamdown": "1.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

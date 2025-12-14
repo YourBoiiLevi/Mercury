@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Power, Wifi, WifiOff, AlertTriangle, Loader } from 'lucide-react';
+import { Power, Wifi, WifiOff, AlertTriangle, Loader, GitBranch } from 'lucide-react';
 
 export type SystemStatusType = 'disconnected' | 'booting' | 'connected' | 'error';
 
@@ -7,6 +7,8 @@ interface SystemStatusProps {
     status: SystemStatusType;
     error?: string | null;
     sandboxId?: string | null;
+    isRepoAttached?: boolean;
+    repoName?: string | null;
 }
 
 const BOOT_MESSAGES = [
@@ -42,7 +44,7 @@ const ProgressBar: React.FC<{ active: boolean }> = ({ active }) => {
     );
 };
 
-const SystemStatus: React.FC<SystemStatusProps> = ({ status, error, sandboxId }) => {
+const SystemStatus: React.FC<SystemStatusProps> = ({ status, error, sandboxId, isRepoAttached = false, repoName }) => {
     const [bootMessageIndex, setBootMessageIndex] = useState(0);
 
     useEffect(() => {
@@ -70,6 +72,9 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ status, error, sandboxId })
             case 'booting':
                 return <Loader size={14} className="text-orange-500 animate-spin" />;
             case 'connected':
+                if (!isRepoAttached) {
+                    return <GitBranch size={14} className="text-orange-500 animate-pulse" />;
+                }
                 return <Wifi size={14} className="text-green-500" />;
             case 'error':
                 return <AlertTriangle size={14} className="text-red-500" />;
@@ -109,13 +114,32 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ status, error, sandboxId })
                 );
 
             case 'connected':
+                if (!isRepoAttached) {
+                    return (
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <span className="text-orange-500 text-xs tracking-wider">
+                                    AWAITING REPOSITORY
+                                </span>
+                            </div>
+                            <div className="text-[10px] text-orange-500/50">
+                                Connect GitHub and select a repository to begin.
+                            </div>
+                        </div>
+                    );
+                }
                 return (
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                             <span className="text-green-500 text-xs tracking-wider">
-                                SYSTEM ONLINE. UPLINK ESTABLISHED.
+                                SYSTEM READY. UPLINK ESTABLISHED.
                             </span>
                         </div>
+                        {repoName && (
+                            <div className="text-[10px] text-green-500/50">
+                                REPO: {repoName}
+                            </div>
+                        )}
                         {sandboxId && (
                             <div className="text-[10px] text-green-500/50">
                                 NODE: {truncateId(sandboxId)}

@@ -36,7 +36,46 @@ export const MERCURY_SYSTEM_INSTRUCTION = `You are MERCURY, an advanced autonomo
 - planner_updateTodo: Update a to-do's status.
 - planner_listTodos: List all to-dos with status summary.
 - planner_deleteTodo: Remove a to-do.
+
+*GitHub (github_):*
+- github_createPR: Create a pull request on the active GitHub repository. Requires: title, body, head branch. Optional: base branch.
 `;
+
+export interface GitHubContextInfo {
+  isConnected: boolean;
+  owner?: string;
+  repo?: string;
+  defaultBranch?: string;
+  repoPath?: string;
+}
+
+export const buildSystemPromptWithGitHub = (ghContext: GitHubContextInfo | null): string => {
+  let prompt = MERCURY_SYSTEM_INSTRUCTION;
+  
+  if (ghContext?.isConnected && ghContext.owner && ghContext.repo) {
+    prompt += `
+**GitHub Context:**
+You are currently connected to GitHub and working on the repository: ${ghContext.owner}/${ghContext.repo}
+- Default branch: ${ghContext.defaultBranch || 'main'}
+- Local path: ${ghContext.repoPath || '/home/user/' + ghContext.repo}
+
+You can:
+1. Make changes to files using file tools
+2. Run git commands via terminal_bash (git status, git add, git commit, git push, git checkout -b, etc.)
+3. Create pull requests using github_createPR after pushing a feature branch
+
+**Git Workflow:**
+1. Create a feature branch: git checkout -b feature/my-feature
+2. Make your changes
+3. Stage changes: git add .
+4. Commit: git commit -m "descriptive message"
+5. Push: git push -u origin feature/my-feature
+6. Create PR using github_createPR tool
+`;
+  }
+  
+  return prompt;
+};
 
 // --- Client Management ---
 let client: GoogleGenAI | null = null;

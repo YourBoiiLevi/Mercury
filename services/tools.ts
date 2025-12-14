@@ -326,6 +326,40 @@ export const TOOLS: FunctionDeclaration[] = [
       required: ["id"],
     },
   },
+
+  // ---------------------------------------------------------------------------
+  // GITHUB TOOLS
+  // ---------------------------------------------------------------------------
+  {
+    name: "github_createPR",
+    description:
+      "Create a pull request on the active GitHub repository. Use after committing and pushing changes to a feature branch.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        title: {
+          type: Type.STRING,
+          description: "The title of the pull request.",
+        },
+        body: {
+          type: Type.STRING,
+          description:
+            "The description/body of the pull request. Supports markdown.",
+        },
+        head: {
+          type: Type.STRING,
+          description:
+            "The name of the branch containing the changes (e.g., 'feature-xyz').",
+        },
+        base: {
+          type: Type.STRING,
+          description:
+            "The name of the branch to merge into. Defaults to the repository's default branch (usually 'main').",
+        },
+      },
+      required: ["title", "body", "head"],
+    },
+  },
 ];
 
 // ============================================================================

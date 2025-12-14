@@ -6,12 +6,15 @@ import { DirectorControls } from './src/components/debug/DirectorControls';
 import DebugUplink from './src/components/debug/DebugUplink';
 import ManualOverrideButton from './src/components/debug/ManualOverrideButton';
 import SystemStatus from './src/components/machine/SystemStatus';
+import { GitHubAuthModal, RepoPickerModal, HydrationLoadingBar, GitHubStatusIndicator } from './src/components/github';
 import { useDirectorMode } from './src/hooks/useDirectorMode';
 import { useMercuryEngine } from './src/hooks/useMercuryEngine';
 import { useE2B } from './src/hooks/useE2B';
+import { useGitHub, GitHubRepo } from './src/contexts/GitHubContext';
 import { E2BProvider } from './src/contexts/E2BContext';
 import { FileSystemProvider } from './src/contexts/FileSystemContext';
 import { TerminalProvider } from './src/contexts/TerminalContext';
+import { GitHubProvider } from './src/contexts/GitHubContext';
 import { AppState, Tab, FileNode } from './types';
 import { INITIAL_FILES } from './constants';
 import { Bug, PanelRightClose, PanelRightOpen, Terminal, Zap, Key, X } from 'lucide-react';
@@ -113,13 +116,25 @@ const AppContent: React.FC = () => {
 
   const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showGitHubAuthModal, setShowGitHubAuthModal] = useState(false);
+  const [showRepoPickerModal, setShowRepoPickerModal] = useState(false);
 
   const [isDirectorMode, setIsDirectorMode] = useState(false);
   const { events: directorEvents, triggers } = useDirectorMode();
 
   const { timeline: mercuryTimeline, isLoading, sendMessage } = useMercuryEngine();
 
-  const { status: e2bStatus, connect, disconnect, error: e2bError, sandboxId } = useE2B();
+  const { status: e2bStatus, connect, disconnect, error: e2bError, sandboxId, sandbox } = useE2B();
+  
+  const {
+    status: ghStatus,
+    error: ghError,
+    user: ghUser,
+    activeRepo,
+    hydration,
+    authenticate: ghAuthenticate,
+    hydrateRepo
+  } = useGitHub();
 
   const events = isDirectorMode ? directorEvents : mercuryTimeline;
 
@@ -144,6 +159,30 @@ const AppContent: React.FC = () => {
       setShowApiKeyModal(false);
     }
   }, [e2bStatus]);
+
+  const handleGitHubAuth = async (pat: string): Promise<boolean> => {
+    const success = await ghAuthenticate(pat);
+    if (success) {
+      setShowGitHubAuthModal(false);
+      setShowRepoPickerModal(true);
+    }
+    return success;
+  };
+
+  const handleRepoSelect = async (repo: GitHubRepo) => {
+    setShowRepoPickerModal(false);
+    if (sandbox) {
+      await hydrateRepo(repo, sandbox);
+    }
+  };
+
+  const handleGitHubStatusClick = () => {
+    if (ghStatus === 'disconnected') {
+      setShowGitHubAuthModal(true);
+    } else if (ghStatus === 'authenticated') {
+      setShowRepoPickerModal(true);
+    }
+  };
 
   const handleTabChange = (tab: Tab) => {
     setAppState(prev => ({ ...prev, activeTab: tab }));
@@ -172,6 +211,8 @@ const AppContent: React.FC = () => {
       sendMessage(msg);
     }
   };
+
+  const isHydrating = ghStatus === 'hydrating';
 
   return (
     <div className="flex w-screen h-screen overflow-hidden bg-[#0A0A0A] text-gray-300 font-mono selection:bg-orange-500 selection:text-black relative">
@@ -218,11 +259,17 @@ const AppContent: React.FC = () => {
           </div>
         </div>
 
-        <div className="px-4 py-2 border-b border-[#222] bg-[#080808]">
+        <div className="px-4 py-2 border-b border-[#222] bg-[#080808] flex items-center justify-between gap-4">
           <SystemStatus
             status={e2bStatus}
             error={e2bError}
             sandboxId={sandboxId}
+          />
+          <GitHubStatusIndicator
+            status={ghStatus}
+            repoName={activeRepo?.name}
+            userName={ghUser?.login}
+            onClick={handleGitHubStatusClick}
           />
         </div>
 
@@ -242,10 +289,19 @@ const AppContent: React.FC = () => {
         </div>
 
         <div className="p-4 bg-[#0A0A0A] border-t border-[#222] shrink-0 relative z-10">
-          <ChatInput
-            onSend={handleSend}
-            disabled={isLoading}
-          />
+          <AnimatePresence mode="wait">
+            {isHydrating ? (
+              <HydrationLoadingBar
+                hydration={hydration}
+                repoName={activeRepo?.name}
+              />
+            ) : (
+              <ChatInput
+                onSend={handleSend}
+                disabled={isLoading}
+              />
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
 
@@ -281,6 +337,19 @@ const AppContent: React.FC = () => {
         )}
       </AnimatePresence>
 
+      <GitHubAuthModal
+        isOpen={showGitHubAuthModal}
+        onClose={() => setShowGitHubAuthModal(false)}
+        onSubmit={handleGitHubAuth}
+        error={ghError}
+      />
+
+      <RepoPickerModal
+        isOpen={showRepoPickerModal}
+        onClose={() => setShowRepoPickerModal(false)}
+        onSelectRepo={handleRepoSelect}
+      />
+
       <ManualOverrideButton />
       <DebugUplink />
     </div>
@@ -290,11 +359,13 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <E2BProvider>
-      <FileSystemProvider>
-        <TerminalProvider>
-          <AppContent />
-        </TerminalProvider>
-      </FileSystemProvider>
+      <GitHubProvider>
+        <FileSystemProvider>
+          <TerminalProvider>
+            <AppContent />
+          </TerminalProvider>
+        </FileSystemProvider>
+      </GitHubProvider>
     </E2BProvider>
   );
 };

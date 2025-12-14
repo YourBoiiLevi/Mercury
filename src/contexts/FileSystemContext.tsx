@@ -8,6 +8,7 @@ import React, {
     ReactNode
 } from 'react';
 import { useE2B } from '../hooks/useE2B';
+import { useGitHub } from '../contexts/GitHubContext';
 
 export interface FileTreeNode {
     id: string;
@@ -34,9 +35,10 @@ interface FileSystemProviderProps {
 
 export const FileSystemProvider: React.FC<FileSystemProviderProps> = ({ children }) => {
     const { sandbox, status } = useE2B();
+    const { repoPath, status: ghStatus, activeRepo } = useGitHub();
     const [files, setFiles] = useState<FileTreeNode[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(['/home/user']));
+    const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
 
     const buildTree = useCallback((entries: any[], basePath: string, openFoldersSet: Set<string>): FileTreeNode[] => {
         const pathMap = new Map<string, FileTreeNode>();
@@ -92,21 +94,21 @@ export const FileSystemProvider: React.FC<FileSystemProviderProps> = ({ children
     }, []);
 
     const refreshFileTree = useCallback(async () => {
-        if (!sandbox) return;
+        if (!sandbox || !repoPath) return;
 
         setIsLoading(true);
         try {
-            const entries = await sandbox.files.list('/home/user', { depth: 5 });
+            const entries = await sandbox.files.list(repoPath, { depth: 5 });
 
             const visible = entries.filter(e => !e.name.startsWith('.'));
 
-            const tree = buildTree(visible, '/home/user', openFolders);
+            const tree = buildTree(visible, repoPath, openFolders);
 
             const root: FileTreeNode = {
-                id: '/home/user',
-                name: 'workspace',
+                id: repoPath,
+                name: activeRepo?.name || 'repository',
                 type: 'folder',
-                path: '/home/user',
+                path: repoPath,
                 isOpen: true,
                 children: tree,
             };
@@ -118,7 +120,7 @@ export const FileSystemProvider: React.FC<FileSystemProviderProps> = ({ children
         } finally {
             setIsLoading(false);
         }
-    }, [sandbox, openFolders, buildTree]);
+    }, [sandbox, repoPath, activeRepo, openFolders, buildTree]);
 
     const toggleFolder = useCallback((path: string) => {
         setOpenFolders(prev => {
@@ -133,10 +135,13 @@ export const FileSystemProvider: React.FC<FileSystemProviderProps> = ({ children
     }, []);
 
     useEffect(() => {
-        if (status === 'connected' && sandbox) {
+        if (status === 'connected' && sandbox && ghStatus === 'ready' && repoPath) {
+            if (!openFolders.has(repoPath)) {
+                setOpenFolders(new Set([repoPath]));
+            }
             refreshFileTree();
         }
-    }, [status, sandbox]);
+    }, [status, sandbox, ghStatus, repoPath]);
 
     const value = useMemo(() => ({
         files,

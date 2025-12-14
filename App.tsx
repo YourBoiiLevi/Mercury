@@ -264,6 +264,8 @@ const AppContent: React.FC = () => {
             status={e2bStatus}
             error={e2bError}
             sandboxId={sandboxId}
+            isRepoAttached={ghStatus === 'ready' && activeRepo !== null}
+            repoName={activeRepo?.full_name}
           />
           <GitHubStatusIndicator
             status={ghStatus}
@@ -278,9 +280,11 @@ const AppContent: React.FC = () => {
             <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
               <div className="text-center">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#111] border border-[#222] flex items-center justify-center">
-                  <div className="w-8 h-8 rounded-full bg-orange-500/20 animate-pulse" />
+                  <div className={`w-8 h-8 rounded-full ${ghStatus === 'ready' && activeRepo ? 'bg-green-500/20' : 'bg-orange-500/20'} animate-pulse`} />
                 </div>
-                <p className="text-orange-500 tracking-widest font-mono">SYSTEM READY</p>
+                <p className={`${ghStatus === 'ready' && activeRepo ? 'text-green-500' : 'text-orange-500'} tracking-widest font-mono`}>
+                  {ghStatus === 'ready' && activeRepo ? 'SYSTEM READY' : 'AWAITING REPOSITORY'}
+                </p>
               </div>
             </div>
           ) : (
@@ -299,6 +303,7 @@ const AppContent: React.FC = () => {
               <ChatInput
                 onSend={handleSend}
                 disabled={isLoading}
+                isRepoAttached={ghStatus === 'ready' && activeRepo !== null}
               />
             )}
           </AnimatePresence>

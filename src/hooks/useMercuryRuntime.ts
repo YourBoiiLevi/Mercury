@@ -40,6 +40,17 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         return sandbox;
     }, [sandbox]);
 
+    const resolvePath = useCallback((inputPath: string): string => {
+        if (!projectRoot) {
+            throw new Error('No repository attached. Cannot resolve path.');
+        }
+        if (inputPath.startsWith(projectRoot)) return inputPath;
+        if (inputPath.startsWith('/')) {
+            throw new Error(`Access denied: paths must be within ${projectRoot}`);
+        }
+        return `${projectRoot}/${inputPath}`;
+    }, [projectRoot]);
+
     const readFile = useCallback(async (
         path: string,
         startLine?: number,
@@ -47,7 +58,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            const content = await sb.files.read(path);
+            const resolvedPath = resolvePath(path);
+            const content = await sb.files.read(resolvedPath);
 
             if (startLine !== undefined && endLine !== undefined) {
                 const lines = content.split('\n');
@@ -55,7 +67,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 return {
                     success: true,
                     data: {
-                        path,
+                        path: resolvedPath,
                         content: sliced,
                         lines: { from: startLine, to: endLine },
                         totalLines: lines.length
@@ -66,7 +78,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
             return {
                 success: true,
                 data: {
-                    path,
+                    path: resolvedPath,
                     content,
                     lines: { from: 1, to: content.split('\n').length }
                 }
@@ -77,7 +89,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 error: err instanceof Error ? err.message : 'Read failed'
             };
         }
-    }, [ensureSandbox]);
+    }, [ensureSandbox, resolvePath]);
 
     const writeFile = useCallback(async (
         path: string,
@@ -85,17 +97,17 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            await sb.files.write(path, content);
-            // Small delay to ensure filesystem has settled
+            const resolvedPath = resolvePath(path);
+            await sb.files.write(resolvedPath, content);
             await new Promise(resolve => setTimeout(resolve, 300));
             await refreshFileTree?.();
 
             return {
                 success: true,
                 data: {
-                    path,
+                    path: resolvedPath,
                     bytesWritten: new TextEncoder().encode(content).length,
-                    message: `File created at ${path}`
+                    message: `File created at ${resolvedPath}`
                 }
             };
         } catch (err) {
@@ -104,7 +116,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 error: err instanceof Error ? err.message : 'Write failed'
             };
         }
-    }, [ensureSandbox, refreshFileTree]);
+    }, [ensureSandbox, resolvePath, refreshFileTree]);
 
     const editFile = useCallback(async (
         path: string,
@@ -113,7 +125,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            const existing = await sb.files.read(path);
+            const resolvedPath = resolvePath(path);
+            const existing = await sb.files.read(resolvedPath);
 
             if (!existing.includes(oldContent)) {
                 return {
@@ -123,17 +136,16 @@ export const useMercuryRuntime = (): MercuryRuntime => {
             }
 
             const updated = existing.replace(oldContent, newContent);
-            await sb.files.write(path, updated);
-            // Small delay to ensure filesystem has settled
+            await sb.files.write(resolvedPath, updated);
             await new Promise(resolve => setTimeout(resolve, 300));
             await refreshFileTree?.();
 
             return {
                 success: true,
                 data: {
-                    path,
+                    path: resolvedPath,
                     replacements: 1,
-                    message: `Replaced content in ${path}`
+                    message: `Replaced content in ${resolvedPath}`
                 }
             };
         } catch (err) {
@@ -142,21 +154,21 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 error: err instanceof Error ? err.message : 'Edit failed'
             };
         }
-    }, [ensureSandbox, refreshFileTree]);
+    }, [ensureSandbox, resolvePath, refreshFileTree]);
 
     const deleteFile = useCallback(async (path: string): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            await sb.files.remove(path);
-            // Small delay to ensure filesystem has settled
+            const resolvedPath = resolvePath(path);
+            await sb.files.remove(resolvedPath);
             await new Promise(resolve => setTimeout(resolve, 300));
             await refreshFileTree?.();
 
             return {
                 success: true,
                 data: {
-                    path,
-                    message: `Deleted ${path}`
+                    path: resolvedPath,
+                    message: `Deleted ${resolvedPath}`
                 }
             };
         } catch (err) {
@@ -165,7 +177,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 error: err instanceof Error ? err.message : 'Delete failed'
             };
         }
-    }, [ensureSandbox, refreshFileTree]);
+    }, [ensureSandbox, resolvePath, refreshFileTree]);
 
     const listFiles = useCallback(async (
         path: string,
@@ -174,7 +186,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            const entries = await sb.files.list(path, { depth: recursive ? 10 : 1 });
+            const resolvedPath = resolvePath(path);
+            const entries = await sb.files.list(resolvedPath, { depth: recursive ? 10 : 1 });
 
             let filtered = entries;
             if (pattern) {
@@ -185,7 +198,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
             return {
                 success: true,
                 data: {
-                    path,
+                    path: resolvedPath,
                     entries: filtered.map(e => ({
                         name: e.name,
                         type: e.type === 'dir' ? 'directory' : 'file',
@@ -201,7 +214,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 error: err instanceof Error ? err.message : 'List failed'
             };
         }
-    }, [ensureSandbox]);
+    }, [ensureSandbox, resolvePath]);
 
     const trimOutput = (str: string, max = 5000): string => {
         if (str.length <= max) return str;
@@ -215,8 +228,20 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            const effectiveCwd = cwd || projectRoot;
-            const fullCommand = effectiveCwd ? `cd ${effectiveCwd} && ${command}` : command;
+            if (!projectRoot) {
+                throw new Error('No repository attached. Cannot run commands.');
+            }
+            let effectiveCwd = projectRoot;
+            if (cwd) {
+                if (cwd.startsWith(projectRoot)) {
+                    effectiveCwd = cwd;
+                } else if (cwd.startsWith('/')) {
+                    throw new Error(`Access denied: cwd must be within ${projectRoot}`);
+                } else {
+                    effectiveCwd = `${projectRoot}/${cwd}`;
+                }
+            }
+            const fullCommand = `cd ${effectiveCwd} && ${command}`;
 
             const result = await sb.commands.run(fullCommand, {
                 timeoutMs: timeout || 30000,
@@ -241,7 +266,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
             };
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Command failed';
-            addCommandEntry?.(command, '', errorMsg, 1, effectiveCwd || undefined);
+            addCommandEntry?.(command, '', errorMsg, 1, projectRoot || undefined);
 
             return {
                 success: false,
@@ -258,11 +283,12 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            let cmd = `grep -rn${caseSensitive ? '' : 'i'} "${pattern}" ${path}`;
+            const resolvedPath = resolvePath(path);
+            let cmd = `grep -rn${caseSensitive ? '' : 'i'} "${pattern}" ${resolvedPath}`;
 
             if (includes && includes.length > 0) {
                 const includeArgs = includes.map(i => `--include="${i}"`).join(' ');
-                cmd = `grep -rn${caseSensitive ? '' : 'i'} ${includeArgs} "${pattern}" ${path}`;
+                cmd = `grep -rn${caseSensitive ? '' : 'i'} ${includeArgs} "${pattern}" ${resolvedPath}`;
             }
 
             const result = await sb.commands.run(cmd, { timeoutMs: 30000 });
@@ -289,7 +315,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 error: err instanceof Error ? err.message : 'Grep failed'
             };
         }
-    }, [ensureSandbox]);
+    }, [ensureSandbox, resolvePath]);
 
     const glob = useCallback(async (
         pattern: string,
@@ -297,7 +323,19 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            const basePath = cwd || projectRoot || '.';
+            if (!projectRoot) {
+                throw new Error('No repository attached. Cannot glob files.');
+            }
+            let basePath = projectRoot;
+            if (cwd) {
+                if (cwd.startsWith(projectRoot)) {
+                    basePath = cwd;
+                } else if (cwd.startsWith('/')) {
+                    throw new Error(`Access denied: cwd must be within ${projectRoot}`);
+                } else {
+                    basePath = `${projectRoot}/${cwd}`;
+                }
+            }
             const cmd = `find ${basePath} -name "${pattern}" -type f 2>/dev/null | head -100`;
 
             const result = await sb.commands.run(cmd, { timeoutMs: 30000 });
@@ -334,7 +372,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         grep,
         glob,
         refreshFiles,
-        isReady: sandbox !== null,
+        isReady: sandbox !== null && projectRoot !== null,
         projectRoot,
     }), [readFile, writeFile, editFile, deleteFile, listFiles, runCommand, grep, glob, refreshFiles, sandbox, projectRoot]);
 };

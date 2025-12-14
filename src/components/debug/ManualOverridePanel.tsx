@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { X, Play, ChevronDown, AlertCircle, Wifi, WifiOff, Github } from 'lucide-react';
+import { X, Play, ChevronDown, AlertCircle, Wifi, WifiOff, Github, FlaskConical } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TOOLS } from '../../../services/tools';
 import { useToolExecutor } from '../../hooks/useToolExecutor';
 import { useGitHub } from '../../contexts/GitHubContext';
+import { useE2B } from '../../hooks/useE2B';
 import { ToolExecutionModal } from './ToolExecutionModal';
 
 const GITHUB_TOOLS = ['github_createPR'];
@@ -42,9 +43,11 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
     const [executionResult, setExecutionResult] = useState<string>('');
     const [usedMock, setUsedMock] = useState(false);
     const [showModal, setShowModal] = useState(false);
+    const [isSmokeTestRunning, setIsSmokeTestRunning] = useState(false);
 
     const { executeTool, isRuntimeReady } = useToolExecutor();
-    const { createPullRequest, status: ghStatus, activeRepo } = useGitHub();
+    const { createPullRequest, status: ghStatus, activeRepo, repoPath } = useGitHub();
+    const { sandbox } = useE2B();
 
     const isGitHubTool = GITHUB_TOOLS.includes(selectedTool);
     const isGitHubReady = ghStatus === 'ready' && activeRepo !== null;
@@ -58,6 +61,79 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
 
     const handleArgChange = (name: string, value: any) => {
         setArgs(prev => ({ ...prev, [name]: value }));
+    };
+
+    const runPRFlowSmokeTest = async () => {
+        if (!isGitHubReady || !sandbox || !activeRepo || !repoPath) {
+            setExecutionState('error');
+            setExecutionResult('GitHub must be connected with a repo loaded');
+            setShowModal(true);
+            return;
+        }
+
+        setIsSmokeTestRunning(true);
+        setShowModal(true);
+        setExecutionState('running');
+        setUsedMock(false);
+
+        const branchName = `smoke-test-${Date.now()}`;
+        const testFileName = `.mercury-smoke-test-${Date.now()}.txt`;
+
+        const steps = [
+            { name: 'Check git status', cmd: `cd ${repoPath} && git status` },
+            { name: 'Create branch', cmd: `cd ${repoPath} && git checkout -b ${branchName}` },
+            { name: 'Create test file', cmd: `cd ${repoPath} && echo "Mercury smoke test at $(date)" > ${testFileName}` },
+            { name: 'Stage changes', cmd: `cd ${repoPath} && git add ${testFileName}` },
+            { name: 'Commit', cmd: `cd ${repoPath} && git commit -m "test: Mercury PR flow smoke test"` },
+            { name: 'Push branch', cmd: `cd ${repoPath} && git push origin ${branchName}` },
+        ];
+
+        let stepResults: string[] = ['🧪 PR FLOW SMOKE TEST\n'];
+
+        for (const step of steps) {
+            stepResults.push(`\n▶ ${step.name}...`);
+            setExecutionResult(stepResults.join('\n'));
+
+            try {
+                const result = await sandbox.commands.run(step.cmd, { timeoutMs: 30000 });
+                stepResults.push(result.stdout || '(no output)');
+
+                if (result.exitCode !== 0 && !step.name.includes('status')) {
+                    stepResults.push(`\n❌ FAILED: ${result.stderr}`);
+                    setExecutionState('error');
+                    setExecutionResult(stepResults.join('\n'));
+                    setIsSmokeTestRunning(false);
+                    return;
+                }
+            } catch (err) {
+                stepResults.push(`\n❌ ERROR: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                setExecutionState('error');
+                setExecutionResult(stepResults.join('\n'));
+                setIsSmokeTestRunning(false);
+                return;
+            }
+        }
+
+        stepResults.push(`\n▶ Creating pull request...`);
+        setExecutionResult(stepResults.join('\n'));
+
+        const prResult = await createPullRequest({
+            title: `[Smoke Test] Mercury PR Flow Test`,
+            body: `This PR was created by Mercury's smoke test.\n\n**Safe to close/delete.**`,
+            head: branchName,
+            base: activeRepo.default_branch
+        });
+
+        if (prResult.success) {
+            stepResults.push(`\n✅ PR created: ${prResult.url}`);
+            setExecutionState('success');
+        } else {
+            stepResults.push(`\n❌ PR failed: ${prResult.error}`);
+            setExecutionState('error');
+        }
+
+        setExecutionResult(stepResults.join('\n'));
+        setIsSmokeTestRunning(false);
     };
 
     const handleExecute = async () => {
@@ -284,12 +360,22 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
                         <div className="p-4 border-t border-[#333]">
                             <button
                                 onClick={handleExecute}
-                                disabled={isExecuting}
+                                disabled={isExecuting || isSmokeTestRunning}
                                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-black text-sm font-mono font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <Play size={16} />
                                 {isExecuting ? 'EXECUTING...' : 'EXECUTE'}
                             </button>
+                            {isGitHubReady && (
+                                <button
+                                    onClick={runPRFlowSmokeTest}
+                                    disabled={isExecuting || isSmokeTestRunning}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 mt-2 border border-orange-500 text-orange-500 text-xs font-mono transition-colors hover:bg-orange-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <FlaskConical size={14} />
+                                    {isSmokeTestRunning ? 'RUNNING SMOKE TEST...' : 'PR FLOW SMOKE TEST'}
+                                </button>
+                            )}
                         </div>
                     </motion.div>
                 )}

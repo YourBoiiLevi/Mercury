@@ -1,9 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { X, Play, ChevronDown, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { X, Play, ChevronDown, AlertCircle, Wifi, WifiOff, Github } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TOOLS } from '../../../services/tools';
 import { useToolExecutor } from '../../hooks/useToolExecutor';
+import { useGitHub } from '../../contexts/GitHubContext';
 import { ToolExecutionModal } from './ToolExecutionModal';
+
+const GITHUB_TOOLS = ['github_createPR'];
 
 interface ManualOverridePanelProps {
     isOpen: boolean;
@@ -41,6 +44,10 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
     const [showModal, setShowModal] = useState(false);
 
     const { executeTool, isRuntimeReady } = useToolExecutor();
+    const { createPullRequest, status: ghStatus, activeRepo } = useGitHub();
+
+    const isGitHubTool = GITHUB_TOOLS.includes(selectedTool);
+    const isGitHubReady = ghStatus === 'ready' && activeRepo !== null;
 
     const params = useMemo(() => getToolParams(selectedTool), [selectedTool]);
 
@@ -60,6 +67,38 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
         setShowModal(true);
 
         try {
+            if (isGitHubTool) {
+                if (selectedTool === 'github_createPR') {
+                    if (!isGitHubReady) {
+                        setExecutionState('error');
+                        setExecutionResult('GitHub not connected or no repository loaded. Please connect to GitHub and select a repository first.');
+                        setUsedMock(false);
+                        return;
+                    }
+
+                    const prResult = await createPullRequest({
+                        title: args.title || '',
+                        body: args.body || '',
+                        head: args.head || '',
+                        base: args.base || activeRepo?.default_branch || 'main'
+                    });
+
+                    setUsedMock(false);
+                    if (prResult.success) {
+                        setExecutionState('success');
+                        setExecutionResult(JSON.stringify({
+                            message: 'Pull request created successfully',
+                            url: prResult.url,
+                            number: prResult.number
+                        }, null, 2));
+                    } else {
+                        setExecutionState('error');
+                        setExecutionResult(prResult.error || 'Failed to create pull request');
+                    }
+                    return;
+                }
+            }
+
             const result = await executeTool(selectedTool, args);
             setUsedMock(result.usedMock);
 
@@ -169,6 +208,24 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
                                 <p className="text-xs text-yellow-500 font-mono">
                                     E2B sandbox not connected. Tools will execute in MOCK mode.
                                 </p>
+                            </div>
+                        )}
+
+                        {/* GitHub Tool Status */}
+                        {isGitHubTool && (
+                            <div className={`mx-4 mt-4 p-3 border flex items-start gap-2 ${isGitHubReady ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'}`}>
+                                <Github size={14} className={isGitHubReady ? 'text-green-500 mt-0.5 shrink-0' : 'text-orange-500 mt-0.5 shrink-0'} />
+                                <div className="text-xs font-mono">
+                                    {isGitHubReady ? (
+                                        <p className="text-green-500">
+                                            Connected to <span className="font-bold">{activeRepo?.full_name}</span>
+                                        </p>
+                                    ) : (
+                                        <p className="text-orange-500">
+                                            GitHub not connected. Connect and select a repository to use this tool.
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                         )}
 

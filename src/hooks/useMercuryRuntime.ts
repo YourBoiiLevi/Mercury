@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useE2B } from './useE2B';
 import { useFileSystem } from '../contexts/FileSystemContext';
 import { useTerminal } from '../contexts/TerminalContext';
+import { useGitHub } from '../contexts/GitHubContext';
 
 export interface RuntimeToolResult {
     success: boolean;
@@ -20,14 +21,17 @@ export interface MercuryRuntime {
     glob: (pattern: string, cwd?: string) => Promise<RuntimeToolResult>;
     refreshFiles: () => Promise<void>;
     isReady: boolean;
+    projectRoot: string | null;
 }
 
 export const useMercuryRuntime = (): MercuryRuntime => {
     const { sandbox } = useE2B();
     const fileSystemContext = useFileSystem();
     const terminalContext = useTerminal();
+    const { repoPath } = useGitHub();
     const refreshFileTree = fileSystemContext?.refreshFileTree;
     const addCommandEntry = terminalContext?.addCommandEntry;
+    const projectRoot = repoPath;
 
     const ensureSandbox = useCallback(() => {
         if (!sandbox) {
@@ -211,7 +215,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            const fullCommand = cwd ? `cd ${cwd} && ${command}` : command;
+            const effectiveCwd = cwd || projectRoot;
+            const fullCommand = effectiveCwd ? `cd ${effectiveCwd} && ${command}` : command;
 
             const result = await sb.commands.run(fullCommand, {
                 timeoutMs: timeout || 30000,
@@ -224,7 +229,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
             const stdout = trimOutput(result.stdout || '');
             const stderr = trimOutput(result.stderr || '');
 
-            addCommandEntry?.(command, stdout, stderr, result.exitCode, cwd);
+            addCommandEntry?.(command, stdout, stderr, result.exitCode, effectiveCwd || undefined);
 
             return {
                 success: true,
@@ -236,14 +241,14 @@ export const useMercuryRuntime = (): MercuryRuntime => {
             };
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Command failed';
-            addCommandEntry?.(command, '', errorMsg, 1, cwd);
+            addCommandEntry?.(command, '', errorMsg, 1, effectiveCwd || undefined);
 
             return {
                 success: false,
                 error: errorMsg
             };
         }
-    }, [ensureSandbox, refreshFileTree, addCommandEntry]);
+    }, [ensureSandbox, refreshFileTree, addCommandEntry, projectRoot]);
 
     const grep = useCallback(async (
         pattern: string,
@@ -292,7 +297,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     ): Promise<RuntimeToolResult> => {
         try {
             const sb = ensureSandbox();
-            const basePath = cwd || '.';
+            const basePath = cwd || projectRoot || '.';
             const cmd = `find ${basePath} -name "${pattern}" -type f 2>/dev/null | head -100`;
 
             const result = await sb.commands.run(cmd, { timeoutMs: 30000 });
@@ -313,7 +318,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
                 error: err instanceof Error ? err.message : 'Glob failed'
             };
         }
-    }, [ensureSandbox]);
+    }, [ensureSandbox, projectRoot]);
 
     const refreshFiles = useCallback(async () => {
         await refreshFileTree?.();
@@ -330,5 +335,6 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         glob,
         refreshFiles,
         isReady: sandbox !== null,
-    }), [readFile, writeFile, editFile, deleteFile, listFiles, runCommand, grep, glob, refreshFiles, sandbox]);
+        projectRoot,
+    }), [readFile, writeFile, editFile, deleteFile, listFiles, runCommand, grep, glob, refreshFiles, sandbox, projectRoot]);
 };

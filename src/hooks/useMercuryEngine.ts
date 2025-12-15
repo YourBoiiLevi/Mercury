@@ -2,13 +2,14 @@ import { useState, useCallback, useRef } from 'react';
 import { Content, Part, FunctionCall } from '@google/genai';
 import { TimelineEvent } from '../types/timeline';
 import { streamMercuryResponse } from '../../services/geminiService';
-import { executeToolMock } from '../../services/tools';
 import { useMercuryRuntime, RuntimeToolResult } from './useMercuryRuntime';
+import { useExa } from '../contexts/ExaContext';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export const useMercuryEngine = () => {
     const runtime = useMercuryRuntime();
+    const exaContext = useExa();
 
     const [history, setHistory] = useState<Content[]>([]);
     const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
@@ -90,6 +91,7 @@ export const useMercuryEngine = () => {
         }
 
         switch (name) {
+            // File System Tools
             case 'file_readFile':
                 return runtime.readFile(args.path, args.startLine, args.endLine);
             case 'file_writeFile':
@@ -98,30 +100,98 @@ export const useMercuryEngine = () => {
                 return runtime.editFile(args.path, args.oldContent, args.newContent);
             case 'file_deleteFile':
                 return runtime.deleteFile(args.path);
-            case 'file_listFiles':
-                return runtime.listFiles(args.path, args.recursive, args.pattern);
 
+            // Terminal Tool (Bash-heavy approach)
             case 'terminal_bash':
                 return runtime.runCommand(args.command, args.cwd, args.timeout);
-            case 'terminal_grep':
-                return runtime.grep(args.pattern, args.path, args.includes, args.caseSensitive);
-            case 'terminal_glob':
-                return runtime.glob(args.pattern, args.cwd);
 
-            case 'web_search':
-            case 'web_fetch':
-                return { error: 'Web tools not yet implemented' };
+            // Web Tools (Exa-powered)
+            case 'web_search': {
+                if (!exaContext?.exaClient) {
+                    return { success: false, error: 'Exa API key not configured. Please set it in Settings.' };
+                }
+                try {
+                    const results = await exaContext.exaClient.searchAndContents(args.query, {
+                        text: true,
+                        highlights: true,
+                        numResults: args.numResults || 5
+                    });
+                    return {
+                        success: true,
+                        data: {
+                            query: args.query,
+                            results: results.results.map((r: any) => ({
+                                title: r.title,
+                                url: r.url,
+                                text: r.text?.slice(0, 500),
+                                highlights: r.highlights
+                            })),
+                            totalResults: results.results.length
+                        }
+                    };
+                } catch (err) {
+                    return { success: false, error: err instanceof Error ? err.message : 'Exa search failed' };
+                }
+            }
 
-            case 'planner_createTodo':
-            case 'planner_updateTodo':
-            case 'planner_listTodos':
-            case 'planner_deleteTodo':
-                return executeToolMock(name, args);
+            case 'web_fetch': {
+                if (!exaContext?.exaClient) {
+                    return { success: false, error: 'Exa API key not configured. Please set it in Settings.' };
+                }
+                try {
+                    const urls = Array.isArray(args.url) ? args.url : [args.url];
+                    const results = await exaContext.exaClient.getContents(urls, { text: true });
+                    return {
+                        success: true,
+                        data: {
+                            contents: results.results.map((r: any) => ({
+                                url: r.url,
+                                title: r.title,
+                                text: r.text
+                            }))
+                        }
+                    };
+                } catch (err) {
+                    return { success: false, error: err instanceof Error ? err.message : 'Exa fetch failed' };
+                }
+            }
+
+            case 'web_answer': {
+                if (!exaContext?.exaClient) {
+                    return { success: false, error: 'Exa API key not configured. Please set it in Settings.' };
+                }
+                try {
+                    const result = await exaContext.exaClient.answer(args.query, { text: true });
+                    return {
+                        success: true,
+                        data: {
+                            query: args.query,
+                            answer: result.answer,
+                            citations: result.citations?.map((c: any) => ({
+                                title: c.title,
+                                url: c.url
+                            }))
+                        }
+                    };
+                } catch (err) {
+                    return { success: false, error: err instanceof Error ? err.message : 'Exa answer failed' };
+                }
+            }
+
+            // Planner Tools (file-based, lean toolset)
+            case 'planner_createPlan':
+                return runtime.writeArtifactFile('PLAN.md', args.content);
+
+            case 'planner_readTodos':
+                return runtime.readArtifactFile('TODO.md');
+
+            case 'planner_writeTodos':
+                return runtime.writeArtifactFile('TODO.md', args.content);
 
             default:
                 return { error: `Unknown tool: ${name}` };
         }
-    }, [runtime]);
+    }, [runtime, exaContext]);
 
     const runAgentLoop = useCallback(async (currentHistory: Content[]) => {
         let loopHistory = [...currentHistory];

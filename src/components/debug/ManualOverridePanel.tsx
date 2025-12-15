@@ -41,7 +41,7 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
     const [isExecuting, setIsExecuting] = useState(false);
     const [executionState, setExecutionState] = useState<'running' | 'success' | 'error'>('running');
     const [executionResult, setExecutionResult] = useState<string>('');
-    const [usedMock, setUsedMock] = useState(false);
+
     const [showModal, setShowModal] = useState(false);
     const [isSmokeTestRunning, setIsSmokeTestRunning] = useState(false);
 
@@ -74,7 +74,6 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
         setIsSmokeTestRunning(true);
         setShowModal(true);
         setExecutionState('running');
-        setUsedMock(false);
 
         const branchName = `smoke-test-${Date.now()}`;
         const testFileName = `.mercury-smoke-test-${Date.now()}.txt`;
@@ -148,7 +147,7 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
                     if (!isGitHubReady) {
                         setExecutionState('error');
                         setExecutionResult('GitHub not connected or no repository loaded. Please connect to GitHub and select a repository first.');
-                        setUsedMock(false);
+
                         return;
                     }
 
@@ -159,7 +158,7 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
                         base: args.base || activeRepo?.default_branch || 'main'
                     });
 
-                    setUsedMock(false);
+
                     if (prResult.success) {
                         setExecutionState('success');
                         setExecutionResult(JSON.stringify({
@@ -176,7 +175,6 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
             }
 
             const result = await executeTool(selectedTool, args);
-            setUsedMock(result.usedMock);
 
             if (result.success) {
                 setExecutionState('success');
@@ -389,7 +387,6 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
                 args={args}
                 state={executionState}
                 result={executionResult}
-                usedMock={usedMock}
             />
         </>
     );

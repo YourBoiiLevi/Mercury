@@ -15,11 +15,11 @@ export interface MercuryRuntime {
     writeFile: (path: string, content: string) => Promise<RuntimeToolResult>;
     editFile: (path: string, oldContent: string, newContent: string) => Promise<RuntimeToolResult>;
     deleteFile: (path: string) => Promise<RuntimeToolResult>;
-    listFiles: (path: string, recursive?: boolean, pattern?: string) => Promise<RuntimeToolResult>;
     runCommand: (command: string, cwd?: string, timeout?: number) => Promise<RuntimeToolResult>;
-    grep: (pattern: string, path: string, includes?: string[], caseSensitive?: boolean) => Promise<RuntimeToolResult>;
-    glob: (pattern: string, cwd?: string) => Promise<RuntimeToolResult>;
     refreshFiles: () => Promise<void>;
+    // Artifact methods
+    readArtifactFile: (filename: string) => Promise<RuntimeToolResult>;
+    writeArtifactFile: (filename: string, content: string) => Promise<RuntimeToolResult>;
     isReady: boolean;
     projectRoot: string | null;
 }
@@ -41,6 +41,10 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     }, [sandbox]);
 
     const resolvePath = useCallback((inputPath: string): string => {
+        // Allow mercury artifacts directory
+        if (inputPath.startsWith('/home/user/mercury')) {
+            return inputPath;
+        }
         if (!projectRoot) {
             throw new Error('No repository attached. Cannot resolve path.');
         }
@@ -50,6 +54,8 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         }
         return `${projectRoot}/${inputPath}`;
     }, [projectRoot]);
+
+    const MERCURY_ARTIFACTS_DIR = '/home/user/mercury';
 
     const readFile = useCallback(async (
         path: string,
@@ -179,43 +185,6 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         }
     }, [ensureSandbox, resolvePath, refreshFileTree]);
 
-    const listFiles = useCallback(async (
-        path: string,
-        recursive?: boolean,
-        pattern?: string
-    ): Promise<RuntimeToolResult> => {
-        try {
-            const sb = ensureSandbox();
-            const resolvedPath = resolvePath(path);
-            const entries = await sb.files.list(resolvedPath, { depth: recursive ? 10 : 1 });
-
-            let filtered = entries;
-            if (pattern) {
-                const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'));
-                filtered = entries.filter(e => regex.test(e.name));
-            }
-
-            return {
-                success: true,
-                data: {
-                    path: resolvedPath,
-                    entries: filtered.map(e => ({
-                        name: e.name,
-                        type: e.type === 'dir' ? 'directory' : 'file',
-                        size: e.size,
-                        path: e.path
-                    })),
-                    total: filtered.length
-                }
-            };
-        } catch (err) {
-            return {
-                success: false,
-                error: err instanceof Error ? err.message : 'List failed'
-            };
-        }
-    }, [ensureSandbox, resolvePath]);
-
     const trimOutput = (str: string, max = 5000): string => {
         if (str.length <= max) return str;
         return str.slice(0, max) + `\n... [truncated ${str.length - max} chars]`;
@@ -275,104 +244,79 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         }
     }, [ensureSandbox, refreshFileTree, addCommandEntry, projectRoot]);
 
-    const grep = useCallback(async (
-        pattern: string,
-        path: string,
-        includes?: string[],
-        caseSensitive = true
-    ): Promise<RuntimeToolResult> => {
-        try {
-            const sb = ensureSandbox();
-            const resolvedPath = resolvePath(path);
-            let cmd = `grep -rn${caseSensitive ? '' : 'i'} "${pattern}" ${resolvedPath}`;
-
-            if (includes && includes.length > 0) {
-                const includeArgs = includes.map(i => `--include="${i}"`).join(' ');
-                cmd = `grep -rn${caseSensitive ? '' : 'i'} ${includeArgs} "${pattern}" ${resolvedPath}`;
-            }
-
-            const result = await sb.commands.run(cmd, { timeoutMs: 30000 });
-
-            const matches = (result.stdout || '').split('\n').filter(Boolean).map(line => {
-                const match = line.match(/^([^:]+):(\d+):(.*)$/);
-                if (match) {
-                    return { file: match[1], line: parseInt(match[2]), content: match[3] };
-                }
-                return null;
-            }).filter(Boolean);
-
-            return {
-                success: true,
-                data: {
-                    pattern,
-                    matches: matches.slice(0, 50),
-                    totalMatches: matches.length
-                }
-            };
-        } catch (err) {
-            return {
-                success: false,
-                error: err instanceof Error ? err.message : 'Grep failed'
-            };
-        }
-    }, [ensureSandbox, resolvePath]);
-
-    const glob = useCallback(async (
-        pattern: string,
-        cwd?: string
-    ): Promise<RuntimeToolResult> => {
-        try {
-            const sb = ensureSandbox();
-            if (!projectRoot) {
-                throw new Error('No repository attached. Cannot glob files.');
-            }
-            let basePath = projectRoot;
-            if (cwd) {
-                if (cwd.startsWith(projectRoot)) {
-                    basePath = cwd;
-                } else if (cwd.startsWith('/')) {
-                    throw new Error(`Access denied: cwd must be within ${projectRoot}`);
-                } else {
-                    basePath = `${projectRoot}/${cwd}`;
-                }
-            }
-            const cmd = `find ${basePath} -name "${pattern}" -type f 2>/dev/null | head -100`;
-
-            const result = await sb.commands.run(cmd, { timeoutMs: 30000 });
-
-            const matches = (result.stdout || '').split('\n').filter(Boolean);
-
-            return {
-                success: true,
-                data: {
-                    pattern,
-                    matches,
-                    total: matches.length
-                }
-            };
-        } catch (err) {
-            return {
-                success: false,
-                error: err instanceof Error ? err.message : 'Glob failed'
-            };
-        }
-    }, [ensureSandbox, projectRoot]);
-
     const refreshFiles = useCallback(async () => {
         await refreshFileTree?.();
     }, [refreshFileTree]);
+
+    // Artifact file operations (for PLAN.md, TODO.md)
+    const readArtifactFile = useCallback(async (filename: string): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            const artifactPath = `${MERCURY_ARTIFACTS_DIR}/${filename}`;
+
+            // Check if directory exists, create if not
+            try {
+                await sb.files.list(MERCURY_ARTIFACTS_DIR);
+            } catch {
+                await sb.commands.run(`mkdir -p ${MERCURY_ARTIFACTS_DIR}`);
+            }
+
+            try {
+                const content = await sb.files.read(artifactPath);
+                return {
+                    success: true,
+                    data: { path: artifactPath, content }
+                };
+            } catch {
+                // File doesn't exist yet
+                return {
+                    success: false,
+                    error: 'FILE_NOT_FOUND'
+                };
+            }
+        } catch (err) {
+            return {
+                success: false,
+                error: err instanceof Error ? err.message : 'Read artifact failed'
+            };
+        }
+    }, [ensureSandbox]);
+
+    const writeArtifactFile = useCallback(async (filename: string, content: string): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            const artifactPath = `${MERCURY_ARTIFACTS_DIR}/${filename}`;
+
+            // Ensure directory exists
+            await sb.commands.run(`mkdir -p ${MERCURY_ARTIFACTS_DIR}`);
+            await sb.files.write(artifactPath, content);
+
+            return {
+                success: true,
+                data: {
+                    path: artifactPath,
+                    bytesWritten: new TextEncoder().encode(content).length,
+                    message: `Artifact ${filename} saved`
+                }
+            };
+        } catch (err) {
+            return {
+                success: false,
+                error: err instanceof Error ? err.message : 'Write artifact failed'
+            };
+        }
+    }, [ensureSandbox]);
 
     return useMemo(() => ({
         readFile,
         writeFile,
         editFile,
         deleteFile,
-        listFiles,
         runCommand,
-        grep,
-        glob,
         refreshFiles,
+        readArtifactFile,
+        writeArtifactFile,
         isReady: sandbox !== null && projectRoot !== null,
         projectRoot,
-    }), [readFile, writeFile, editFile, deleteFile, listFiles, runCommand, grep, glob, refreshFiles, sandbox, projectRoot]);
+    }), [readFile, writeFile, editFile, deleteFile, runCommand, refreshFiles, readArtifactFile, writeArtifactFile, sandbox, projectRoot]);
 };

@@ -10,7 +10,7 @@ interface ToolExecutionModalProps {
     args: Record<string, any>;
     state: 'running' | 'success' | 'error';
     result?: string;
-    usedMock?: boolean;
+
 }
 
 export const ToolExecutionModal: React.FC<ToolExecutionModalProps> = ({
@@ -20,7 +20,7 @@ export const ToolExecutionModal: React.FC<ToolExecutionModalProps> = ({
     args,
     state,
     result,
-    usedMock,
+
 }) => {
     return (
         <AnimatePresence>
@@ -50,11 +50,7 @@ export const ToolExecutionModal: React.FC<ToolExecutionModalProps> = ({
                                     <h2 className="text-sm font-mono font-medium text-gray-200">
                                         Manual Override Execution
                                     </h2>
-                                    {usedMock && (
-                                        <span className="text-xs text-yellow-500 font-mono">
-                                            [MOCK MODE]
-                                        </span>
-                                    )}
+
                                 </div>
                             </div>
                             <button

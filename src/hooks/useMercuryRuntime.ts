@@ -4,6 +4,15 @@ import { useFileSystem } from '../contexts/FileSystemContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useGitHub } from '../contexts/GitHubContext';
 
+// Convert Uint8Array to Base64 string (browser-compatible)
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
 export interface RuntimeToolResult {
     success: boolean;
     data?: any;
@@ -20,6 +29,17 @@ export interface MercuryRuntime {
     // Artifact methods
     readArtifactFile: (filename: string) => Promise<RuntimeToolResult>;
     writeArtifactFile: (filename: string, content: string) => Promise<RuntimeToolResult>;
+
+    // Browser methods
+    browserNavigate: (url: string) => Promise<RuntimeToolResult>;
+    browserScreenshot: () => Promise<RuntimeToolResult>;
+    browserClick: (x: number, y: number, type: 'left' | 'right' | 'middle' | 'double') => Promise<RuntimeToolResult>;
+    browserMoveMouse: (x: number, y: number) => Promise<RuntimeToolResult>;
+    browserType: (text: string, delay?: number) => Promise<RuntimeToolResult>;
+    browserPress: (key: string) => Promise<RuntimeToolResult>;
+    browserScroll: (amount: number) => Promise<RuntimeToolResult>;
+    browserDrag: (startX: number, startY: number, endX: number, endY: number) => Promise<RuntimeToolResult>;
+
     isReady: boolean;
     projectRoot: string | null;
 }
@@ -56,6 +76,7 @@ export const useMercuryRuntime = (): MercuryRuntime => {
     }, [projectRoot]);
 
     const MERCURY_ARTIFACTS_DIR = '/home/user/mercury';
+    const SCREENSHOTS_DIR = '/home/user/mercury/screenshots';
 
     const readFile = useCallback(async (
         path: string,
@@ -307,6 +328,132 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         }
     }, [ensureSandbox]);
 
+    // -------------------------------------------------------------------------
+    // BROWSER IMPLEMENTATIONS
+    // -------------------------------------------------------------------------
+
+    const browserNavigate = useCallback(async (url: string): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            // We use 'open' which typically opens the default browser (Chrome in this env)
+            // Since we launched chrome at startup, this should open a new tab or use existing?
+            // Actually, if chrome is running, `open <url>` might open in it.
+            // But `sb.launch` is strictly for apps. 
+            // `sb.open` is for files/URLs.
+            await sb.open(url);
+            return { success: true, data: { message: `Navigated to ${url}` } };
+        } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : 'Navigation failed' };
+        }
+    }, [ensureSandbox]);
+
+    const browserScreenshot = useCallback(async (): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            const screenshot = await sb.screenshot(); // Uint8Array
+
+            // Ensure dir exists
+            await sb.commands.run(`mkdir -p ${SCREENSHOTS_DIR}`);
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `screenshot-${timestamp}.png`;
+            const path = `${SCREENSHOTS_DIR}/${filename}`;
+
+            // Convert Uint8Array to ArrayBuffer for file write
+            const buffer = screenshot.buffer.slice(screenshot.byteOffset, screenshot.byteOffset + screenshot.byteLength);
+            await sb.files.write(path, buffer);
+
+            // Convert to Base64 for LLM multimodal response and UI display
+            const imageData = uint8ArrayToBase64(screenshot);
+
+            return {
+                success: true,
+                data: {
+                    message: `Screenshot saved to ${path}`,
+                    path,
+                    image_data: imageData, // Base64 for Gemini 3.0 multimodal and UI
+                }
+            };
+        } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : 'Screenshot failed' };
+        }
+    }, [ensureSandbox]);
+
+    const browserClick = useCallback(async (
+        x: number,
+        y: number,
+        type: 'left' | 'right' | 'middle' | 'double'
+    ): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            switch (type) {
+                case 'double': await sb.doubleClick(x, y); break;
+                case 'right': await sb.rightClick(x, y); break;
+                case 'middle': await sb.middleClick(x, y); break;
+                case 'left':
+                default:
+                    await sb.leftClick(x, y); break;
+            }
+            return { success: true, data: { message: `Performed ${type} click at (${x}, ${y})` } };
+        } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : 'Click failed' };
+        }
+    }, [ensureSandbox]);
+
+    const browserMoveMouse = useCallback(async (x: number, y: number): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            await sb.moveMouse(x, y);
+            return { success: true, data: { message: `Moved mouse to (${x}, ${y})` } };
+        } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : 'Move mouse failed' };
+        }
+    }, [ensureSandbox]);
+
+    const browserType = useCallback(async (text: string, delay?: number): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            // Default delay 10ms as per new default if not specified? 
+            // SDK default is 75ms. User might want faster.
+            // I'll leave SDK default if undefined, or passed value.
+            await sb.write(text, { delayInMs: delay });
+            return { success: true, data: { message: `Typed "${text}"` } };
+        } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : 'Type failed' };
+        }
+    }, [ensureSandbox]);
+
+    const browserPress = useCallback(async (key: string): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            await sb.press(key);
+            return { success: true, data: { message: `Pressed "${key}"` } };
+        } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : 'Press key failed' };
+        }
+    }, [ensureSandbox]);
+
+    const browserScroll = useCallback(async (amount: number): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            const direction = amount > 0 ? 'up' : 'down';
+            await sb.scroll(direction, Math.abs(amount));
+            return { success: true, data: { message: `Scrolled ${direction} by ${Math.abs(amount)}` } };
+        } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : 'Scroll failed' };
+        }
+    }, [ensureSandbox]);
+
+    const browserDrag = useCallback(async (startX: number, startY: number, endX: number, endY: number): Promise<RuntimeToolResult> => {
+        try {
+            const sb = ensureSandbox();
+            await sb.drag([startX, startY], [endX, endY]);
+            return { success: true, data: { message: `Dragged from (${startX}, ${startY}) to (${endX}, ${endY})` } };
+        } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : 'Drag failed' };
+        }
+    }, [ensureSandbox]);
+
     return useMemo(() => ({
         readFile,
         writeFile,
@@ -316,7 +463,22 @@ export const useMercuryRuntime = (): MercuryRuntime => {
         refreshFiles,
         readArtifactFile,
         writeArtifactFile,
+
+        // Browser methods
+        browserNavigate,
+        browserScreenshot,
+        browserClick,
+        browserMoveMouse,
+        browserType,
+        browserPress,
+        browserScroll,
+        browserDrag,
+
         isReady: sandbox !== null && projectRoot !== null,
         projectRoot,
-    }), [readFile, writeFile, editFile, deleteFile, runCommand, refreshFiles, readArtifactFile, writeArtifactFile, sandbox, projectRoot]);
+    }), [
+        readFile, writeFile, editFile, deleteFile, runCommand, refreshFiles, readArtifactFile, writeArtifactFile,
+        browserNavigate, browserScreenshot, browserClick, browserMoveMouse, browserType, browserPress, browserScroll, browserDrag,
+        sandbox, projectRoot
+    ]);
 };

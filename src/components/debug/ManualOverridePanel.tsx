@@ -232,6 +232,18 @@ export const ManualOverridePanel: React.FC<ManualOverridePanelProps> = ({ isOpen
                     />
                 );
             default:
+                // Use textarea for content-heavy fields
+                if (['content', 'body', 'instruction', 'oldContent', 'newContent', 'description'].includes(param.name)) {
+                    return (
+                        <textarea
+                            value={value}
+                            onChange={(e) => handleArgChange(param.name, e.target.value)}
+                            placeholder={param.description}
+                            rows={10}
+                            className="w-full px-3 py-2 bg-[#111] border border-[#333] text-gray-200 text-xs font-mono focus:border-orange-500/50 focus:outline-none resize-y"
+                        />
+                    );
+                }
                 return (
                     <input
                         type="text"

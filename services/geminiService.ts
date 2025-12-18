@@ -2,7 +2,7 @@ import { GoogleGenAI, Content, Part, FunctionDeclaration } from "@google/genai";
 import { TOOLS } from "./tools";
 
 // --- Constants ---
-const MODEL_ID = "gemini-flash-latest";
+const MODEL_ID = "gemini-3-flash-preview";
 
 // --- RPIT System Prompt with XML Structure ---
 export const MERCURY_SYSTEM_INSTRUCTION = `
@@ -46,6 +46,14 @@ You are an autonomous agent. Continue working until the user's query is COMPLETE
 
 **GitHub (github_):**
 - github_createPR: Create a pull request after pushing a feature branch.
+
+**Browser (browser_):**
+- **Use for testing & verification:** Navigate to localhost or deployed URLs to verify changes visually.
+- **Use for web interaction:** Navigate to documentation or resources if \`web_search\` is insufficient.
+- browser_navigate: Open a URL.
+- browser_click: Click elements (left/right/double).
+- browser_type: Type text.
+- browser_screenshot: Capture visual state.
 </available_tools>
 
 <PHASE_RESEARCH>

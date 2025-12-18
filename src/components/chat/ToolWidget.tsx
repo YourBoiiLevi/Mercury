@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Check, X, Loader2, ChevronDown, ChevronRight, Terminal, Globe, FileText, Wrench, ListChecks } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Check, X, Loader2, ChevronDown, ChevronRight, Terminal, Globe, FileText, Wrench, ListChecks, SquareDashedMousePointer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ToolWidgetProps {
@@ -10,10 +10,11 @@ interface ToolWidgetProps {
 }
 
 // Tool category detection - uses prefix convention: category_toolName
-type ToolCategory = 'terminal' | 'web' | 'file' | 'planner' | 'generic';
+type ToolCategory = 'terminal' | 'web' | 'file' | 'planner' | 'browser' | 'generic';
 
 const getToolCategory = (toolName: string): ToolCategory => {
     // Check for prefix-based naming (e.g., terminal_bash, web_search)
+    if (toolName.startsWith('browser_')) return 'browser';
     if (toolName.startsWith('terminal_')) return 'terminal';
     if (toolName.startsWith('web_')) return 'web';
     if (toolName.startsWith('file_')) return 'file';
@@ -29,6 +30,7 @@ const getToolCategory = (toolName: string): ToolCategory => {
 };
 
 const CATEGORY_CONFIG = {
+    browser: { icon: SquareDashedMousePointer, color: 'text-cyan-400' },
     terminal: { icon: Terminal, color: 'text-orange-500' },
     web: { icon: Globe, color: 'text-blue-400' },
     file: { icon: FileText, color: 'text-yellow-400' },
@@ -41,6 +43,19 @@ export const ToolWidget: React.FC<ToolWidgetProps> = ({ toolName, args, state, r
 
     const category = getToolCategory(toolName);
     const { icon: IconComponent, color } = CATEGORY_CONFIG[category];
+
+    // Parse result to check for image_data (for browser_screenshot)
+    const parsedResult = useMemo(() => {
+        if (!result) return null;
+        try {
+            return JSON.parse(result);
+        } catch {
+            return null;
+        }
+    }, [result]);
+
+    // Check if this is a screenshot with image data
+    const hasScreenshotImage = toolName === 'browser_screenshot' && parsedResult?.image_data;
 
     const getIcon = () => <IconComponent size={16} className={color} />;
 
@@ -95,10 +110,20 @@ export const ToolWidget: React.FC<ToolWidgetProps> = ({ toolName, args, state, r
                             </div>
                             {result && (
                                 <div>
-                                    <div className="text-gray-500 mb-1">Result:</div>
-                                    <pre className={`overflow-x-auto p-2 bg-[#111] border border-[#222] ${state === 'error' ? 'text-red-400' : 'text-green-400'}`}>
-                                        {result}
-                                    </pre>
+                                    <div className="text-gray-500 mb-1">
+                                        {hasScreenshotImage ? 'Screenshot:' : 'Result:'}
+                                    </div>
+                                    {hasScreenshotImage ? (
+                                        <img
+                                            src={`data:image/png;base64,${parsedResult.image_data}`}
+                                            alt="Screenshot"
+                                            className="max-w-full border border-[#333] rounded"
+                                        />
+                                    ) : (
+                                        <pre className={`overflow-x-auto p-2 bg-[#111] border border-[#222] ${state === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                                            {result}
+                                        </pre>
+                                    )}
                                 </div>
                             )}
                         </div>

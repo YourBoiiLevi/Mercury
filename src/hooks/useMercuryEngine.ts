@@ -188,7 +188,31 @@ export const useMercuryEngine = () => {
             case 'planner_writeTodos':
                 return runtime.writeArtifactFile('TODO.md', args.content);
 
+
+            // Browser Tools (Computer Use)
+            case 'browser_navigate':
+                return runtime.browserNavigate(args.url);
+            case 'browser_screenshot':
+                return runtime.browserScreenshot();
+            case 'browser_leftClick':
+                return runtime.browserClick(args.x, args.y, 'left');
+            case 'browser_doubleClick':
+                return runtime.browserClick(args.x, args.y, 'double');
+            case 'browser_rightClick':
+                return runtime.browserClick(args.x, args.y, 'right');
+            case 'browser_moveMouse':
+                return runtime.browserMoveMouse(args.x, args.y);
+            case 'browser_type':
+                return runtime.browserType(args.text, args.delay);
+            case 'browser_press':
+                return runtime.browserPress(args.key);
+            case 'browser_scroll':
+                return runtime.browserScroll(args.amount);
+            case 'browser_drag':
+                return runtime.browserDrag(args.startX, args.startY, args.endX, args.endY);
+
             default:
+                // Try to find the tool in the runtime if it matches a known browser pattern or just fallback
                 return { error: `Unknown tool: ${name}` };
         }
     }, [runtime, exaContext]);
@@ -236,12 +260,35 @@ export const useMercuryEngine = () => {
                         return e;
                     }) as TimelineEvent[]);
 
-                    functionResponseParts.push({
-                        functionResponse: {
-                            name: call.name,
-                            response: result.data || result
-                        }
-                    });
+                    // Special handling for browser_screenshot - include multimodal image data
+                    if (call.name === 'browser_screenshot' && result.success && result.data?.image_data) {
+                        // Gemini 3.0 multimodal function response format
+                        // Include the image as inline data so the model can "see" it
+                        functionResponseParts.push({
+                            functionResponse: {
+                                name: call.name,
+                                response: {
+                                    success: true,
+                                    message: result.data.message,
+                                    path: result.data.path,
+                                },
+                                parts: [{
+                                    inlineData: {
+                                        mimeType: 'image/png',
+                                        data: result.data.image_data,
+                                    }
+                                }]
+                            }
+                        } as unknown as Part);
+                    } else {
+                        // Default handling for all other tools
+                        functionResponseParts.push({
+                            functionResponse: {
+                                name: call.name,
+                                response: result.data || result
+                            }
+                        });
+                    }
                 }
 
                 const functionResponseContent: Content = { role: 'user', parts: functionResponseParts };

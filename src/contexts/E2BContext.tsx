@@ -53,10 +53,20 @@ export const E2BProvider: React.FC<E2BProviderProps> = ({ children }) => {
         console.log('[E2B] Connecting with key:', apiKey.slice(0, 8) + '...');
 
         try {
-            const newSandbox = await Sandbox.create({
+            const newSandbox = await Sandbox.create("mercury-vm-dev", {
                 apiKey,
                 timeoutMs: 10 * 60 * 1000,
             });
+
+            // Launch Browser immediately so it's ready for VNC and tools
+            console.log('[E2B] Launching Google Chrome...');
+            try {
+                await newSandbox.launch('google-chrome');
+                console.log('[E2B] Google Chrome launched');
+            } catch (launchErr) {
+                console.warn('[E2B] Failed to launch Chrome:', launchErr);
+                // Don't fail the whole connection if chrome fails, but warn
+            }
 
             sandboxRef.current = newSandbox;
             setSandbox(newSandbox);
@@ -120,7 +130,7 @@ export const E2BProvider: React.FC<E2BProviderProps> = ({ children }) => {
         return () => {
             if (sandboxRef.current) {
                 console.log('[E2B] Unmounting: cleaning up sandbox...');
-                sandboxRef.current.kill().catch(() => {});
+                sandboxRef.current.kill().catch(() => { });
             }
         };
     }, []);

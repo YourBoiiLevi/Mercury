@@ -1,129 +1,151 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MERCURY // TERMINAL</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100..800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://esm.sh/katex@0.16.22/dist/katex.min.css">
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              mercury: {
-                black: '#050505',
-                carbon: '#121212',
-                orange: '#FF3B00',
-                dim: 'rgba(255, 59, 0, 0.2)',
-                text: '#E0E0E0'
-              }
-            },
-            fontFamily: {
-              mono: ['"JetBrains Mono"', 'monospace'],
-              sans: ['"Inter"', 'sans-serif'],
-            },
-            backgroundImage: {
-              'dot-grid': 'radial-gradient(#FF3B00 1px, transparent 1px)',
-              'scanlines': 'linear-gradient(to bottom, rgba(255,59,0,0.03) 50%, rgba(0,0,0,0) 50%)',
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MERCURY // TERMINAL</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100..800&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://esm.sh/katex@0.16.22/dist/katex.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            mercury: {
+              black: '#050505',
+              carbon: '#121212',
+              orange: '#FF3B00',
+              dim: 'rgba(255, 59, 0, 0.2)',
+              text: '#E0E0E0'
             }
+          },
+          fontFamily: {
+            mono: ['"JetBrains Mono"', 'monospace'],
+            sans: ['"Inter"', 'sans-serif'],
+          },
+          backgroundImage: {
+            'dot-grid': 'radial-gradient(#FF3B00 1px, transparent 1px)',
+            'scanlines': 'linear-gradient(to bottom, rgba(255,59,0,0.03) 50%, rgba(0,0,0,0) 50%)',
           }
         }
       }
-    </script>
-    <style>
-      body {
-        background-color: #050505;
-        color: #E0E0E0;
-        font-family: 'JetBrains Mono', monospace;
-        overflow: hidden;
-      }
-      
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #FF3B00;
-        border-radius: 0px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #CC2F00;
+    }
+  </script>
+  <style>
+    body {
+      background-color: #050505;
+      color: #E0E0E0;
+      font-family: 'JetBrains Mono', monospace;
+      overflow: hidden;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #FF3B00;
+      border-radius: 0px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #CC2F00;
+    }
+
+    /* Utilities */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .scanline-bg {
+      background-size: 100% 4px;
+      background-image: linear-gradient(to bottom, rgba(255, 59, 0, 0.02) 50%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .dot-grid-bg {
+      background-image: radial-gradient(rgba(255, 59, 0, 0.15) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1;
       }
 
-      /* Utilities */
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
+      50% {
+        opacity: 0;
       }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      
-      .scanline-bg {
-        background-size: 100% 4px;
-        background-image: linear-gradient(to bottom, rgba(255, 59, 0, 0.02) 50%, transparent 50%);
-        pointer-events: none;
-      }
+    }
 
-      .dot-grid-bg {
-        background-image: radial-gradient(rgba(255, 59, 0, 0.15) 1px, transparent 1px);
-        background-size: 20px 20px;
-      }
+    .cursor-blink {
+      animation: blink 1s step-end infinite;
+    }
 
-      @keyframes blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0; }
-      }
-      .cursor-blink {
-        animation: blink 1s step-end infinite;
-      }
-      
-      /* Streamdown/Markdown Styles */
-      .prose-mercury p {
-        margin-bottom: 0.75em;
-        line-height: 1.6;
-      }
-      .prose-mercury code {
-        background: rgba(255, 59, 0, 0.1);
-        color: #FF3B00;
-        padding: 0.1em 0.3em;
-        border-radius: 0px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.9em;
-      }
-      .prose-mercury pre {
-        background: #121212 !important;
-        border: 1px solid rgba(255, 59, 0, 0.2);
-        padding: 1rem;
-        border-radius: 0;
-        margin: 1rem 0;
-        overflow-x: auto;
-      }
-      .prose-mercury ul, .prose-mercury ol {
-        margin-left: 1.5rem;
-        margin-bottom: 0.75em;
-      }
-      .prose-mercury li {
-        list-style-type: disc;
-        padding-left: 0.5em;
-      }
-      .prose-mercury strong {
-        color: #FFF;
-        font-weight: 600;
-      }
-      .prose-mercury a {
-        color: #FF3B00;
-        text-decoration: underline;
-      }
-    </style>
+    /* Streamdown/Markdown Styles */
+    .prose-mercury p {
+      margin-bottom: 0.75em;
+      line-height: 1.6;
+    }
+
+    .prose-mercury code {
+      background: rgba(255, 59, 0, 0.1);
+      color: #FF3B00;
+      padding: 0.1em 0.3em;
+      border-radius: 0px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9em;
+    }
+
+    .prose-mercury pre {
+      background: #121212 !important;
+      border: 1px solid rgba(255, 59, 0, 0.2);
+      padding: 1rem;
+      border-radius: 0;
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+
+    .prose-mercury ul,
+    .prose-mercury ol {
+      margin-left: 1.5rem;
+      margin-bottom: 0.75em;
+    }
+
+    .prose-mercury li {
+      list-style-type: disc;
+      padding-left: 0.5em;
+    }
+
+    .prose-mercury strong {
+      color: #FFF;
+      font-weight: 600;
+    }
+
+    .prose-mercury a {
+      color: #FF3B00;
+      text-decoration: underline;
+    }
+  </style>
   <script type="importmap">
 {
   "imports": {
@@ -139,10 +161,21 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+  <script>
+    window.global = window;
+    window.process = {
+      env: { DEBUG: undefined },
+      version: '', // This prevents the .slice() error
+      nextTick: function (fn) { setTimeout(fn, 0); }
+    };
+    window.Buffer = window.Buffer || [];
+  </script>
+  <link rel="stylesheet" href="/index.css">
 </head>
-  <body>
-    <div id="root"></div>
+
+<body>
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>

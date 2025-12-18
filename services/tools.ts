@@ -251,4 +251,125 @@ export const TOOLS: FunctionDeclaration[] = [
       required: ["title", "body", "head"],
     },
   },
+  // ---------------------------------------------------------------------------
+  // BROWSER TOOLS (COMPUTER USE)
+  // ---------------------------------------------------------------------------
+  {
+    name: "browser_navigate",
+    description: "Navigate the remote browser to a URL.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        url: { type: Type.STRING, description: "The URL to open." },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "browser_screenshot",
+    description: "Take a screenshot of the remote browser/desktop.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {},
+    },
+  },
+  {
+    name: "browser_leftClick",
+    description: "Perform a left mouse click at the specified coordinates.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        x: { type: Type.NUMBER, description: "X coordinate." },
+        y: { type: Type.NUMBER, description: "Y coordinate." },
+      },
+      required: ["x", "y"],
+    },
+  },
+  {
+    name: "browser_doubleClick",
+    description: "Perform a double left mouse click at the specified coordinates.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        x: { type: Type.NUMBER, description: "X coordinate." },
+        y: { type: Type.NUMBER, description: "Y coordinate." },
+      },
+      required: ["x", "y"],
+    },
+  },
+  {
+    name: "browser_rightClick",
+    description: "Perform a right mouse click at the specified coordinates.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        x: { type: Type.NUMBER, description: "X coordinate." },
+        y: { type: Type.NUMBER, description: "Y coordinate." },
+      },
+      required: ["x", "y"],
+    },
+  },
+  {
+    name: "browser_moveMouse",
+    description: "Move the mouse cursor to specific coordinates without clicking.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        x: { type: Type.NUMBER, description: "X coordinate." },
+        y: { type: Type.NUMBER, description: "Y coordinate." },
+      },
+      required: ["x", "y"],
+    },
+  },
+  {
+    name: "browser_type",
+    description: "Type text at the current cursor position/focused input.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        text: { type: Type.STRING, description: "The text to type." },
+        delay: { type: Type.NUMBER, description: "Optional delay between keystrokes in ms (default: 10)." },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "browser_press",
+    description: "Press a specific key or combination of keys (e.g., 'Enter', 'Control+C').",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        key: {
+          type: Type.STRING,
+          description: "The key or key combination to press. Can be a single key (e.g., 'Enter') or a combination (accepts direct SDK format)."
+        },
+      },
+      required: ["key"],
+    },
+  },
+  {
+    name: "browser_scroll",
+    description: "Scroll the page up or down.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        amount: { type: Type.NUMBER, description: "Amount to scroll. Positive for UP, negative for DOWN." },
+      },
+      required: ["amount"],
+    },
+  },
+  {
+    name: "browser_drag",
+    description: "Drag from one coordinate to another.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        startX: { type: Type.NUMBER, description: "Starting X coordinate." },
+        startY: { type: Type.NUMBER, description: "Starting Y coordinate." },
+        endX: { type: Type.NUMBER, description: "Ending X coordinate." },
+        endY: { type: Type.NUMBER, description: "Ending Y coordinate." },
+      },
+      required: ["startX", "startY", "endX", "endY"],
+    },
+  },
 ];

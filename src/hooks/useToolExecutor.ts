@@ -113,6 +113,18 @@ export const useToolExecutor = () => {
         'planner_writeTodos': async (args) => {
             return runtime.writeArtifactFile('TODO.md', args.content);
         },
+
+        // Browser Tools (Computer Use)
+        'browser_navigate': async (args) => runtime.browserNavigate(args.url),
+        'browser_screenshot': async () => runtime.browserScreenshot(),
+        'browser_leftClick': async (args) => runtime.browserClick(args.x, args.y, 'left'),
+        'browser_doubleClick': async (args) => runtime.browserClick(args.x, args.y, 'double'),
+        'browser_rightClick': async (args) => runtime.browserClick(args.x, args.y, 'right'),
+        'browser_moveMouse': async (args) => runtime.browserMoveMouse(args.x, args.y),
+        'browser_type': async (args) => runtime.browserType(args.text, args.delay),
+        'browser_press': async (args) => runtime.browserPress(args.key),
+        'browser_scroll': async (args) => runtime.browserScroll(args.amount),
+        'browser_drag': async (args) => runtime.browserDrag(args.startX, args.startY, args.endX, args.endY),
     }), [runtime, exaContext]);
 
     const executeTool = useCallback(async (
